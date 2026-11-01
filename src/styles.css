@@ -428,3 +428,29 @@ a.btn{text-decoration:none}
 }
 
 .crewhead .grow{flex:1 1 220px}
+
+/* Homes: the ladder from a doorway to Backstreet Tower */
+.homehero>.body{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.homehero .bigicon{width:96px;height:96px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--deck-2);border:1px solid var(--rope-2);color:var(--mist)}
+.homehero .bigicon svg{width:48px;height:48px}
+.homehero.tier-1 .bigicon{color:var(--brick)}
+.homehero.tier-2 .bigicon,.homehero.tier-3 .bigicon,.homehero.tier-4 .bigicon,.homehero.tier-5 .bigicon{color:var(--seaglass)}
+.homehero.tier-6 .bigicon,.homehero.tier-7 .bigicon,.homehero.tier-8 .bigicon{color:var(--signal);border-color:color-mix(in srgb,var(--signal) 45%,var(--rope))}
+.homehero.tier-9 .bigicon,.homehero.tier-10 .bigicon{color:var(--heather);border-color:color-mix(in srgb,var(--heather) 50%,var(--rope))}
+.homehero.tier-11 .bigicon,.homehero.tier-12 .bigicon{color:#f2c14e;border-color:#f2c14e;background:radial-gradient(circle at 50% 35%,color-mix(in srgb,#f0a83a 30%,var(--deck-2)),var(--deck-2) 75%)}
+.homepic svg{width:24px;height:24px;color:var(--fog)}
+.ladder{list-style:none;margin:0;padding:0}
+.rung{display:grid;grid-template-columns:28px 48px minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px 16px;border-bottom:1px solid var(--rope);position:relative}
+.rung:last-child{border-bottom:0}
+.rung .step{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--deck-3);color:var(--mist);margin-top:10px}
+.rung .act{align-self:center}
+.rung.past .step{background:var(--seaglass);color:#06231a}
+.rung.here{background:var(--sodium-soft)}
+.rung.here .step{background:var(--sodium);color:var(--sodium-ink)}
+.rung.locked{opacity:.6}
+.rung .chips .pill{height:22px;font-size:12px}
+@media (max-width:560px){
+  .rung{grid-template-columns:28px 44px minmax(0,1fr)}
+  .rung .act{grid-column:2/-1;justify-self:start}
+  .homehero .bigicon{width:72px;height:72px}
+}

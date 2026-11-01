@@ -198,7 +198,7 @@ function Shell() {
       </div>
       <nav className="tabbar" aria-label="Main">
         {TABS.map(([k, l, Icon]) => <button key={k} aria-current={base === k ? "page" : undefined} onClick={() => go(k)}><Icon />{l}</button>)}
-        <button onClick={() => setOpen(true)} aria-label="All places"><Ic.Menu />More{(state.unseen + state.unread_dms + state.goals_ready) > 0 && <span className="count">{state.unseen + state.unread_dms + state.goals_ready}</span>}</button>
+        <button onClick={() => setOpen(true)} aria-label="All places"><Ic.Menu />More{(state.unseen + state.unread_dms + state.goals_ready + (state.home_ready ? 1 : 0)) > 0 && <span className="count">{state.unseen + state.unread_dms + state.goals_ready + (state.home_ready ? 1 : 0)}</span>}</button>
       </nav>
     </div>
   );
@@ -206,6 +206,7 @@ function Shell() {
 
 function badge(k, me, inv, state) {
   if (k === "street" && state.goals_ready) return <span className="count">{state.goals_ready}</span>;
+  if (k === "home" && state.home_ready) return <span className="count">1</span>;
   if (k === "messages" && state.unread_dms) return <span className="count">{state.unread_dms}</span>;
   if (k === "crews" && state.crew?.apps) return <span className="count">{state.crew.apps}</span>;
   if (k === "tokens" && inv.token) return <span className="count quiet">{inv.token}</span>;

@@ -34,7 +34,7 @@ export const SKILLS = [
 export const skillProgress = xp => { const l = Math.min(50, Math.floor(Math.sqrt((xp || 0) / 25)) + 1); if (l >= 50) return [50, 1]; const a = (l - 1) ** 2 * 25, b = l ** 2 * 25; return [l, ((xp || 0) - a) / (b - a)]; };
 
 export function Street() {
-  const { me, holdings } = useGame();
+  const { me, holdings, state } = useGame();
   const d = DISTRICTS.find(x => x.id === me.district) || DISTRICTS[0];
   const scene = useMemo(() => { const s = SCENES[d.id]; return s[Math.floor(Math.random() * s.length)]; }, [d.id]);
   const jobs = CRIMES.filter(c => (c.d === d.id || c.d === "any") && c.lvl <= me.level).slice(-3).reverse();
@@ -49,6 +49,7 @@ export function Street() {
           <span className="pill" style={{ alignSelf: "flex-start", background: "#ffffff1f", color: "#fff" }}><Ic.MapPin />{DISTRICT_NAMES[d.id]}</span>
           <h1>{greeting()}, {me.name}.</h1>
           <p className="scene">{scene}</p>
+          {state.tower?.length > 0 && <p className="small" style={{ color: "#f2c14e", fontWeight: 600 }}>Lit up on Backstreet Tower tonight: {state.tower.join(" and ")}</p>}
           <div className="row" style={{ flexWrap: "wrap", marginTop: 6 }}>
             <button className="btn" onClick={() => go("jobs")}><Ic.Briefcase />Find a job</button>
             <button className="btn ghost" onClick={() => go("fights")}><Ic.Swords />Pick a fight</button>

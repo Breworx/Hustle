@@ -141,14 +141,27 @@ create table if not exists game.admin_log(id bigint generated always as identity
   at timestamptz not null default now());
 create table if not exists game.properties(id text primary key, name text not null, price bigint not null, mood int not null, stamina int not null, lvl int not null,
   blurb text not null, sort int not null);
-insert into game.properties(id, name, price, mood, stamina, lvl, blurb, sort) values
-  ('bedsit', 'Bedsit above the dairy', 0, 0, 0, 1, 'One room, one window, one neighbour who practises the trumpet.', 1),
-  ('flat', 'Flat on the Waterfront', 30000, 100, 0, 3, 'Two rooms and a view of the ferry terminal, if you lean out.', 2),
-  ('townhouse', 'Old Town townhouse', 150000, 250, 10, 6, 'Brick walls, a proper kitchen and a lock that actually works.', 3),
-  ('apartment', 'Harbour apartment', 600000, 500, 25, 10, 'Floor-to-ceiling glass, a gym downstairs and a doorman who knows your name.', 4),
-  ('penthouse', 'Heights penthouse', 2500000, 1000, 50, 15, 'The top floor. Private lift, roof terrace, and a skyline that belongs to you.', 5),
-  ('estate', 'Island estate', 10000000, 2000, 75, 20, 'Your own island in the harbour, with a jetty, a helipad and no neighbours at all.', 6)
-on conflict (id) do update set name = excluded.name, price = excluded.price, mood = excluded.mood, stamina = excluded.stamina, lvl = excluded.lvl, blurb = excluded.blurb, sort = excluded.sort;
+-- Homes: from a doorway to Backstreet Tower. Each step raises your mood and stamina limits and brings its own perks.
+-- Perk keys: regen (stamina and health come back faster, or slower if negative), heat (cools faster), mug (muggers take less),
+-- hosp (shorter A&E stays), listings (extra market listings), travel_disc, travel_free, travel_fast, daily (a free thing each day).
+alter table game.properties add column if not exists perks jsonb not null default '{}'::jsonb;
+delete from game.properties where id not in ('rough','tent','van','bedsit','flat','townhouse','apartment','penthouse','mansion','estate','yacht','tower');
+insert into game.properties(id, name, price, mood, stamina, lvl, blurb, sort, perks) values
+  ('rough', 'A doorway behind the fish market', 0, 0, 0, 1, 'Cardboard, a sleeping bag that was never quite dry, and seagulls with opinions.', 1, '{"regen":-0.25}'),
+  ('tent', 'A tent under the motorway', 500, 50, 0, 1, 'Keeps the rain off. Mostly. The traffic noise is free.', 2, '{}'),
+  ('van', 'A campervan with one working door', 4000, 100, 0, 2, 'Home is wherever you park it, until the council tows it.', 3, '{"travel_disc":0.5}'),
+  ('bedsit', 'Bedsit above the dairy', 15000, 150, 5, 3, 'One room, one window, one neighbour who practises the trumpet. The dairy owner leaves you a pie.', 4, '{"regen":0.05,"daily":{"item":"pie","qty":2}}'),
+  ('flat', 'Flat on the Waterfront', 45000, 250, 10, 4, 'Two rooms and a view of the ferry terminal, if you lean out. And a lock.', 5, '{"regen":0.05,"mug":0.2,"daily":{"item":"lager","qty":1}}'),
+  ('townhouse', 'Old Town townhouse', 150000, 400, 15, 6, 'Brick walls, a proper kitchen and a first-aid cupboard that is actually stocked.', 6, '{"regen":0.1,"mug":0.25,"hosp":0.15,"daily":{"item":"med","qty":1}}'),
+  ('apartment', 'Harbour apartment', 600000, 600, 25, 9, 'Floor-to-ceiling glass, a gym downstairs and a doorman who knows your name.', 7, '{"regen":0.1,"mug":0.3,"hosp":0.15,"heat":0.15,"listings":5,"daily":{"item":"drink","qty":1}}'),
+  ('penthouse', 'Heights penthouse', 2500000, 900, 40, 13, 'The top floor. Private lift, roof terrace, and a doorman who forgets faces for a fee.', 8, '{"regen":0.15,"mug":0.35,"hosp":0.2,"heat":0.25,"listings":5,"daily":{"item":"drink","qty":2}}'),
+  ('mansion', 'Clifftop mansion', 8000000, 1300, 55, 16, 'Twelve bedrooms, a wine cellar, a panic room, and staff who never ask questions.', 9, '{"regen":0.2,"mug":0.5,"hosp":0.25,"heat":0.3,"listings":10,"daily":{"item":"smallbox","qty":1}}'),
+  ('estate', 'Island estate', 25000000, 1800, 70, 20, 'Your own island in the harbour, with a jetty, a helipad and a boat that takes you anywhere for free.', 10, '{"regen":0.2,"mug":0.55,"hosp":0.3,"heat":0.35,"listings":10,"travel_free":true,"daily":{"item":"smallbox","qty":1,"cash":10000}}'),
+  ('yacht', 'The superyacht Nightjar', 80000000, 2400, 85, 24, 'Ninety metres of polished teak with a submarine in the garage. You can be anywhere in the city in seconds.', 11, '{"regen":0.25,"mug":0.65,"hosp":0.35,"heat":0.4,"listings":15,"travel_free":true,"travel_fast":true,"daily":{"item":"crate","qty":1,"cash":20000}}'),
+  ('tower', 'Backstreet Tower', 250000000, 3200, 100, 28, 'Sixty floors of glass in the middle of the skyline, with your name lit up on the top. Forty floors of tenants pay you rent.', 12, '{"regen":0.3,"mug":0.75,"hosp":0.4,"heat":0.5,"listings":20,"travel_free":true,"travel_fast":true,"skyline":true,"daily":{"item":"safebox","qty":1,"cash":50000}}')
+on conflict (id) do update set name = excluded.name, price = excluded.price, mood = excluded.mood, stamina = excluded.stamina, lvl = excluded.lvl, blurb = excluded.blurb, sort = excluded.sort, perks = excluded.perks;
+
+
 -- Every item a player has ever owned, for the collection log.
 create table if not exists game.collection(player_id uuid not null references game.players(id) on delete cascade, item_id text not null, first_at timestamptz not null default now(),
   primary key (player_id, item_id));
@@ -170,7 +183,16 @@ alter table game.players add column if not exists streak int not null default 0;
 alter table game.players add column if not exists streak_day date;
 alter table game.players add column if not exists guide jsonb not null default '{"done":{},"claimed":{}}'::jsonb;
 alter table game.players add column if not exists daily jsonb not null default '{}'::jsonb;
-alter table game.players add column if not exists property text not null default 'bedsit';
+alter table game.players add column if not exists property text not null default 'rough';
+alter table game.players alter column property set default 'rough';
+alter table game.players add column if not exists home_at timestamptz;
+update game.players set property = 'rough' where property not in (select id from game.properties);
+-- Mood and stamina limits are the base for your level plus what your home adds.
+update game.players p set max_mood = 250 + (p.level / 3) * 25 + h.mood, max_stamina = 100 + h.stamina from game.properties h where h.id = p.property;
+-- A home's perk value for a player (0 if the home doesn't have it).
+create or replace function game.hperk(pid uuid, k text) returns numeric language sql stable as $$
+  select coalesce(case jsonb_typeof(h.perks->k) when 'number' then (h.perks->>k)::numeric when 'boolean' then case when (h.perks->>k)::boolean then 1 else 0 end else 0 end, 0)
+  from game.players p join game.properties h on h.id = p.property where p.id = pid $$;
 alter table game.messages add column if not exists channel text not null default 'city';
 create index if not exists messages_channel on game.messages (channel, id desc);
 
@@ -262,7 +284,7 @@ end $$;
 
 -- Load the caller's row, lock it, and apply everything that happens with time passing.
 create or replace function game.me() returns game.players language plpgsql as $$
-declare p game.players; m numeric; t timestamptz := now();
+declare p game.players; m numeric; t timestamptz := now(); hr numeric;
 begin
   if auth.uid() is null then raise exception 'Please sign in.'; end if;
   select * into p from game.players where id = auth.uid() for update;
@@ -271,11 +293,12 @@ begin
   m := extract(epoch from (t - p.bars_at)) / 60.0;
   if m > 0 then
     -- Regulars (bought with tokens) get stamina and grit back 25% faster.
-    if p.stamina < p.max_stamina then p.stamina := least(p.max_stamina, p.stamina + m * 5 / 3.0 * case when p.regular_until > t then 1.25 else 1 end); end if;
+    hr := 1 + game.hperk(p.id, 'regen');
+    if p.stamina < p.max_stamina then p.stamina := least(p.max_stamina, p.stamina + m * 5 / 3.0 * hr * case when p.regular_until > t then 1.25 else 1 end); end if;
     if p.grit < p.max_grit then p.grit := least(p.max_grit, p.grit + m * 0.5 * case when p.regular_until > t then 1.25 else 1 end); end if;
     if p.mood < p.max_mood then p.mood := least(p.max_mood, p.mood + m * 2); end if;
-    if p.health < p.max_health then p.health := least(p.max_health, p.health + m * 5 / 3.0); end if;
-    p.heat := greatest(0, p.heat - m * case when game.has_block(p.id, 'UPVT') then 1.25 else 1 end);
+    if p.health < p.max_health then p.health := least(p.max_health, p.health + m * 5 / 3.0 * hr); end if;
+    p.heat := greatest(0, p.heat - m * (1 + game.hperk(p.id, 'heat')) * case when game.has_block(p.id, 'UPVT') then 1.25 else 1 end);
     p.bars_at := t;
   end if;
   if p.travel_until is not null and p.travel_until <= t then
@@ -432,6 +455,8 @@ begin
              'apps', case when p.crew_role in ('leader', 'officer') then (select count(*) from game.crew_apps a where a.crew_id = c.id) else 0 end)
              from game.crews c where c.id = p.crew_id),
     'goals_ready', game.goals_ready(p.id),
+    'home_ready', (select (h.perks ? 'daily') and (p.home_at is null or p.home_at < now() - interval '20 hours') from game.properties h where h.id = p.property),
+    'tower', (select jsonb_agg(name order by name) from (select name from game.players where property = 'tower' limit 5) x),
     'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes'),
     'server_time', now());
 end $$;
@@ -479,7 +504,7 @@ begin
       update game.players set jail_until = now() + make_interval(secs => secs), jail_reason = 'Caught: ' || lower(j.name) where id = p.id;
       outcome := 'jail';
     elsif r < (case when j.id = 'bins' then 0.16 else 0.62 end) then
-      secs := 60 + j.grit * 20;
+      secs := round((60 + j.grit * 20) * (1 - game.hperk(p.id, 'hosp')));
       update game.players set hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Hurt on a job: ' || lower(j.name),
         health = greatest(1, health - 25) where id = p.id;
       outcome := 'hosp';
@@ -538,7 +563,7 @@ begin
     perform game.track(p.id, 'fight_win', 1);
     return jsonb_build_object('won', true, 'cash', g, 'item', loot, 'xp', f.xp, 'chance', round(ch * 100));
   else
-    lost := floor(p.cash * 0.1); secs := 120 + f.lvl * 20;
+    lost := floor(p.cash * 0.1 * (1 - game.hperk(p.id, 'mug'))); secs := round((120 + f.lvl * 20) * (1 - game.hperk(p.id, 'hosp')));
     update game.players set losses = losses + 1, cash = cash - lost, health = greatest(1, health - (40 + floor(random() * 31))),
       hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Lost a fight to the ' || lower(f.name) where id = p.id;
     perform game.add_skill(p.id, 'fight', 2);
@@ -568,8 +593,8 @@ begin
   ch := least(0.95, greatest(0.05, 1 / (1 + exp(-8 * (pa / (pa + pd) - 0.5)))));
   update game.players set stamina = stamina - 25, heat = least(100, heat + 5) where id = p.id;
   if random() < ch then
-    mug := floor(t.cash * (0.05 + random() * 0.05));
-    secs := 300 + floor(random() * 600)::int;
+    mug := floor(t.cash * (0.05 + random() * 0.05) * (1 - game.hperk(t.id, 'mug')));
+    secs := round((300 + floor(random() * 600)) * (1 - game.hperk(t.id, 'hosp')))::int;
     update game.players set cash = cash - mug, losses = losses + 1, health = greatest(1, round(health * 0.2)),
       hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Mugged by ' || p.name where id = t.id;
     update game.players set cash = cash + mug, wins = wins + 1 where id = p.id;
@@ -583,7 +608,7 @@ begin
     perform game.track(p.id, 'fight_win', 1);
     return jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'chance', round(ch * 100));
   else
-    secs := 180 + floor(random() * 300)::int;
+    secs := round((180 + floor(random() * 300)) * (1 - game.hperk(p.id, 'hosp')))::int;
     update game.players set losses = losses + 1, health = greatest(1, round(health * 0.2)),
       hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Beaten by ' || t.name where id = p.id;
     update game.players set wins = wins + 1 where id = t.id;
@@ -703,9 +728,9 @@ begin
   if not found then raise exception 'No such place.'; end if;
   if d.id = p.district then raise exception 'You''re already there.'; end if;
   if p.level < d.lvl then raise exception '% opens at level %.', d.name, d.lvl; end if;
-  fare := case when game.has_block(p.id, 'VOLT') then 0 else d.fare end;
+  fare := case when game.has_block(p.id, 'VOLT') or game.hperk(p.id, 'travel_free') > 0 then 0 else round(d.fare * (1 - game.hperk(p.id, 'travel_disc'))) end;
   if p.cash < fare then raise exception 'The fare is %.', game.fmt(fare); end if;
-  secs := case when game.has_block(p.id, 'TRHD') then 20 else 60 end;
+  secs := case when game.hperk(p.id, 'travel_fast') > 0 then 5 when game.has_block(p.id, 'TRHD') then 20 else 60 end;
   update game.players set cash = cash - fare, travel_to = d.id, travel_until = now() + make_interval(secs => secs) where id = p.id;
   perform game.track(p.id, 'travel', 1);
   return jsonb_build_object('to', d.id, 'secs', secs, 'fare', fare);
@@ -805,7 +830,7 @@ begin
   perform game.market_ok(p);
   if p_item = 'founder' then raise exception 'Founder''s keys stay with the founder. They can''t be sold.'; end if;
   slots := 20 + game.skill_lvl(p.skills, 'trade') / 5 + case when game.has_block(p.id, 'SHWD') then 2 else 0 end
-         + case when p.stall_until > now() then 10 else 0 end;
+         + case when p.stall_until > now() then 10 else 0 end + game.hperk(p.id, 'listings')::int;
   if (select count(*) from game.listings where seller = p.id) >= slots then raise exception 'You can have % listings. Cancel one first.', slots; end if;
   perform game.take(p.id, p_item, p_qty);
   insert into game.listings(seller, item_id, qty, price) values (p.id, p_item, p_qty, p_price) returning game.listings.id into new_id;
@@ -1103,6 +1128,7 @@ create or replace function game.today() returns date language sql stable as $$ s
 create or replace function game.guide_steps() returns jsonb language sql immutable as $$
   select '[
     {"k":"job","t":"Do your first job","d":"Jobs are how you make money. Start with the bins.","cash":200,"go":"jobs"},
+    {"k":"home","t":"Get off the street","d":"A $500 tent beats a doorway. Sleeping rough slows everything down.","cash":300,"go":"home"},
     {"k":"train","t":"Train at the gym","d":"Stronger stats win fights.","cash":200,"go":"gym"},
     {"k":"use","t":"Use something from your stash","d":"A lager lifts your mood, which makes training count for more.","cash":300,"go":"stash"},
     {"k":"travel","t":"Take a taxi somewhere","d":"Each district has its own jobs and trouble.","cash":500,"go":"map"},
@@ -1506,7 +1532,11 @@ language plpgsql security definer set search_path = game, public as $$
 declare p game.players;
 begin
   p := game.me();
-  return jsonb_build_object('current', p.property, 'homes', (select jsonb_agg(to_jsonb(h) order by sort) from game.properties h));
+  return jsonb_build_object('current', p.property, 'collected_today', p.home_at > now() - interval '20 hours',
+    'next_collect', p.home_at + interval '20 hours',
+    'homes', (select jsonb_agg(to_jsonb(h) || jsonb_build_object('owners', (select count(*) from game.players x where x.property = h.id),
+                'names', case when h.sort >= 11 then (select jsonb_agg(x.name order by x.name) from (select name from game.players where property = h.id limit 12) x) end) order by sort)
+              from game.properties h));
 end $$;
 
 create or replace function public.property_move(p_id text) returns jsonb
@@ -1519,13 +1549,35 @@ begin
   if not found then raise exception 'No such place.'; end if;
   if nw.id = cur.id then raise exception 'You already live there.'; end if;
   if p.level < nw.lvl then raise exception 'You need level % to live there.', nw.lvl; end if;
-  -- You sell your current home for 70% of what it cost.
+  -- Your current home sells for 70% of what it cost.
   net := nw.price - floor(cur.price * 0.7);
   if net > p.cash then raise exception 'Moving costs % after selling your current place. You have % on you.', game.fmt(net), game.fmt(p.cash); end if;
   update game.players set cash = cash - net, property = nw.id,
-    max_mood = max_mood - cur.mood + nw.mood, max_stamina = max_stamina - cur.stamina + nw.stamina,
-    mood = least(mood, max_mood - cur.mood + nw.mood) where id = p.id;
+    max_mood = 250 + (level / 3) * 25 + nw.mood, max_stamina = 100 + nw.stamina,
+    mood = least(mood, 250 + (level / 3) * 25 + nw.mood), stamina = least(stamina, 100 + nw.stamina * 1.5),
+    home_at = case when nw.sort > cur.sort then null else home_at end where id = p.id;
+  if nw.sort > cur.sort then perform game.track(p.id, 'home', 1); end if;
+  if nw.sort >= 9 and nw.sort > cur.sort then
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle',
+      case nw.id when 'tower' then format('%s just bought Backstreet Tower. Their name is going up on the skyline tonight.', p.name)
+                 when 'yacht' then format('%s just bought the superyacht Nightjar. Mind the wake.', p.name)
+                 else format('%s just moved into a %s.', p.name, lower(nw.name)) end);
+  end if;
   return jsonb_build_object('moved', nw.id, 'paid', net);
+end $$;
+
+-- Each home's daily perk: collect once every 20 hours.
+create or replace function public.home_collect() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; d jsonb;
+begin
+  p := game.me();
+  select perks->'daily' into d from game.properties where id = p.property;
+  if d is null then raise exception 'Your home doesn''t come with a daily perk yet. Move up the ladder.'; end if;
+  if p.home_at > now() - interval '20 hours' then raise exception 'Already collected. Come back later.'; end if;
+  update game.players set home_at = now(), cash = cash + coalesce((d->>'cash')::bigint, 0) where id = p.id;
+  if d ? 'item' then perform game.give(p.id, d->>'item', (d->>'qty')::int); end if;
+  return d;
 end $$;
 
 -- ---------- looks, profile and the collection log ----------
@@ -1756,7 +1808,7 @@ do $$ declare f record; begin
              'bank','chat_send','chat_recent','leaderboard','item_supply','token_info','token_spend',
              'goals_state','checkin','goal_claim','guide_claim','crew_create','crew_list','crew_get','crew_apply','crew_withdraw','crew_decide',
              'crew_leave','crew_member','crew_vault','crew_motto','dm_send','dm_threads','dm_thread','contact_toggle','report',
-             'property_list','property_move','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
+             'property_list','property_move','home_collect','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
              'admin_resolve','admin_delete_message') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;

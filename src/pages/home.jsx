@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useGame } from "../state.jsx";
-import { Panel, Empty, ItemThumb, Rarity, Scarce } from "../ui/ui.jsx";
+import { Panel, Empty, ItemThumb, Rarity, Scarce, Countdown } from "../ui/ui.jsx";
 import { call } from "../lib/supabase.js";
 import { money, num } from "../lib/format.js";
 import { go } from "../lib/nav.js";
@@ -9,34 +9,85 @@ import { useSupply } from "../lib/supply.js";
 import * as Ic from "../ui/icons.js";
 
 // ---------------- Home ----------------
+export const HOME_ICON = { rough: Ic.DoorOpen, tent: Ic.Tent, van: Ic.Caravan, bedsit: Ic.Bed, flat: Ic.Sofa, townhouse: Ic.House, apartment: Ic.Building,
+  penthouse: Ic.Hotel, mansion: Ic.Castle, estate: Ic.TreePalm, yacht: Ic.Ship, tower: Ic.Building2 };
+const pc = x => Math.round(x * 100) + "%";
+// Plain-language list of what a home does for you.
+export function perkList(h) {
+  const k = h.perks || {}, out = [];
+  if (h.mood) out.push([`+${num(h.mood)} mood limit`, "good"]);
+  if (h.stamina) out.push([`+${h.stamina} stamina limit`, "good"]);
+  if (k.regen < 0) out.push([`Stamina and health ${pc(-k.regen)} slower`, "bad"]);
+  if (k.regen > 0) out.push([`Stamina and health ${pc(k.regen)} faster`, "good"]);
+  if (k.mug) out.push([`Muggers take ${pc(k.mug)} less`, "good"]);
+  if (k.hosp) out.push([`${pc(k.hosp)} shorter A&E stays`, "good"]);
+  if (k.heat) out.push([`Heat cools ${pc(k.heat)} faster`, "good"]);
+  if (k.listings) out.push([`+${k.listings} market listings`, "good"]);
+  if (k.travel_disc) out.push([`Taxis ${pc(k.travel_disc)} off`, "good"]);
+  if (k.travel_free) out.push([k.travel_fast ? "Free travel in 5 seconds" : "Free taxis", "good"]);
+  if (k.daily) out.push([`Every day: ${dailyText(k.daily)}`, "warn"]);
+  if (k.skyline) out.push(["Your name on the skyline", "warn"]);
+  return out;
+}
+export const dailyText = d => [d.item ? `${d.qty > 1 ? d.qty + " × " : ""}${IT[d.item]?.n || d.item}` : null, d.cash ? money(d.cash) : null].filter(Boolean).join(" and ");
+
 export function Home() {
-  const { me, run, busy, toast } = useGame();
+  const { me, run, busy, toast, refresh, showSheet } = useGame();
   const [d, setD] = useState(null);
   const load = () => call("property_list").then(setD).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!d) return <Empty title="Loading…" />;
-  const cur = d.homes.find(h => h.id === d.current);
+  const cur = d.homes.find(h => h.id === d.current), idx = d.homes.indexOf(cur);
+  const next = d.homes[idx + 1];
+  const netFor = h => h.price - Math.floor(cur.price * 0.7);
+  const CurIcon = HOME_ICON[cur.id] || Ic.House;
+  const move = h => run("property_move", { p_id: h.id }, r => {
+    load();
+    if (h.sort > cur.sort) showSheet({ verdict: "Moved in", title: h.name, story: h.blurb, lines: perkList(h).map(x => x[0]), pic: <span className="thumb homepic">{React.createElement(HOME_ICON[h.id] || Ic.House)}</span> });
+    else toast(`Moved to ${h.name.toLowerCase()}. You pocketed ${money(-r.paid)}.`, "good");
+  });
   return (
     <div className="page">
-      <div className="pagehead"><div><h1>Home</h1><p>Where you sleep sets your limits. A bigger place means a higher mood ceiling, which makes every gym session count for more, and the best homes add stamina too. When you move, your old place sells for 70% of what it cost.</p></div></div>
-      <div className="stats">
-        <div className="stat"><div className="k">You live in</div><div className="v" style={{ fontSize: 18 }}>{cur.name}</div></div>
-        <div className="stat"><div className="k">Mood ceiling</div><div className="v">{num(me.max_mood)}</div></div>
-        <div className="stat"><div className="k">Stamina ceiling</div><div className="v">{num(me.max_stamina)}</div></div>
-      </div>
-      <div className="homes">{d.homes.map(h => {
-        const here = h.id === d.current, locked = me.level < h.lvl, net = h.price - Math.floor(cur.price * 0.7);
-        return (
-          <div key={h.id} className={`panel home ${here ? "here" : ""}`}>
-            <div className="body stack-sm">
-              <div className="row" style={{ justifyContent: "space-between" }}><h2>{h.name}</h2>{here ? <span className="pill good"><Ic.Check />You live here</span> : locked ? <span className="pill"><Ic.Lock />Level {h.lvl}</span> : null}</div>
-              <p className="muted small">{h.blurb}</p>
-              <div className="row small" style={{ flexWrap: "wrap", gap: 6 }}>{h.mood > 0 && <span className="pill">+{num(h.mood)} mood</span>}{h.stamina > 0 && <span className="pill">+{h.stamina} stamina</span>}<span className="pill">{h.price ? money(h.price) : "Free"}</span></div>
-              {!here && <button className={`btn ${net < 0 ? "ghost" : ""}`} disabled={busy || locked || net > me.cash || me.status !== "ok"}
-                onClick={() => run("property_move", { p_id: h.id }, r => { load(); toast(`Welcome home. ${r.paid >= 0 ? `Moving cost ${money(r.paid)}.` : `You pocketed ${money(-r.paid)} from the move.`}`, "good"); })}>
-                {net >= 0 ? `Move in for ${money(net)}` : `Downsize and get ${money(-net)}`}</button>}
+      <div className="pagehead"><div><h1>Home</h1><p>Everyone starts with nothing. Every step up the ladder raises your mood and stamina limits and brings its own perks. When you move, your old place sells for 70% of what it cost.</p></div></div>
+
+      <div className={`panel homehero tier-${cur.sort}`}><div className="body">
+        <span className="bigicon"><CurIcon /></span>
+        <div className="stack-sm grow">
+          <span className="tiny">You live in</span>
+          <h2>{cur.name}</h2>
+          <p className="muted small">{cur.blurb}</p>
+          <div className="chips">{perkList(cur).map(([t, tone]) => <span key={t} className={`pill ${tone}`}>{t}</span>)}{perkList(cur).length === 0 && <span className="pill">No perks yet</span>}</div>
+          {cur.perks?.daily && <div className="row" style={{ marginTop: 4 }}>
+            <button className="btn good" disabled={busy || d.collected_today} onClick={() => run("home_collect", {}, r => { load(); refresh(); toast(`Collected ${dailyText(r)}.`, "good"); })}>
+              {d.collected_today ? <>Collected. More in <Countdown until={d.next_collect} onDone={load} /></> : <><Ic.Gift />Collect {dailyText(cur.perks.daily)}</>}</button></div>}
+        </div>
+      </div></div>
+
+      {next && <Panel title="Next step up" note={me.level < next.lvl ? `Opens at level ${next.lvl}` : null}>
+        <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
+          <span className="thumb homepic">{React.createElement(HOME_ICON[next.id] || Ic.House)}</span>
+          <div className="grow" style={{ minWidth: 200 }}><b>{next.name}</b>
+            <div className="xpbar" style={{ marginTop: 6 }}><i style={{ width: Math.min(100, (me.cash / Math.max(1, netFor(next))) * 100) + "%" }} /></div>
+            <div className="tiny" style={{ marginTop: 4 }}>{me.cash >= netFor(next) ? "You can afford it now." : `${money(netFor(next) - me.cash)} to go. It costs ${money(netFor(next))} after selling your current place.`}</div></div>
+          <button className="btn" disabled={busy || me.level < next.lvl || me.cash < netFor(next) || me.status !== "ok"} onClick={() => move(next)}>Move in for {money(netFor(next))}</button>
+        </div>
+      </Panel>}
+
+      <Panel title="The ladder" note="From a doorway to the top of the skyline." flush>
+        <ol className="ladder">{d.homes.map((h, i) => { const here = h.id === cur.id, past = i < idx, locked = me.level < h.lvl, net = netFor(h); const Icon = HOME_ICON[h.id] || Ic.House; return (
+          <li key={h.id} className={`rung ${here ? "here" : ""} ${past ? "past" : ""} ${locked ? "locked" : ""}`}>
+            <span className="step">{i + 1}</span>
+            <span className="thumb homepic"><Icon /></span>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}><b>{h.name}</b>
+                <span className="tiny">{h.price ? money(h.price) : "Free"}{h.lvl > 1 ? `, level ${h.lvl}` : ""}</span></div>
+              <div className="chips" style={{ marginTop: 6 }}>{perkList(h).map(([t, tone]) => <span key={t} className={`pill ${tone}`}>{t}</span>)}</div>
+              {h.names?.length > 0 && <div className="tiny" style={{ marginTop: 6 }}>{h.id === "tower" ? "Name on the tower: " : "Owned by "}{h.names.join(", ")}</div>}
             </div>
-          </div>); })}</div>
+            <div className="act">{here ? <span className="pill good"><Ic.Check />You live here</span> : locked ? <span className="pill"><Ic.Lock />Level {h.lvl}</span> :
+              <button className={`btn sm ${net < 0 ? "ghost" : ""}`} disabled={busy || net > me.cash || me.status !== "ok"} onClick={() => move(h)}>{net >= 0 ? `Move in for ${money(net)}` : `Downsize, get ${money(-net)}`}</button>}</div>
+          </li>); })}</ol>
+      </Panel>
     </div>
   );
 }
