@@ -299,8 +299,19 @@ alter table game.cities add column if not exists country text;
 create index if not exists cities_country on game.cities (country);
 alter table game.players add column if not exists country text not null default 'NZ';
 alter table game.players add column if not exists search_at timestamptz;
+-- Places players own to rent out. A tenant is another player, or a local (npc) found when the place is advertised.
+create table if not exists game.rentals(id bigint generated always as identity primary key,
+  owner uuid not null references game.players(id) on delete cascade, property text not null references game.properties(id),
+  rent bigint not null, listed boolean not null default true, tenant uuid unique references game.players(id) on delete set null, npc text,
+  since timestamptz, paid_to timestamptz, checked_at timestamptz, earned bigint not null default 0, total bigint not null default 0,
+  paid bigint not null default 0, bought_at timestamptz not null default now());
+create index if not exists rentals_owner on game.rentals (owner);
+create index if not exists rentals_market on game.rentals (listed) where tenant is null and npc is null;
+-- The home you actually live in: a place you're renting, or your own.
+create or replace function game.home_of(pid uuid) returns text language sql stable as $$
+  select coalesce((select r.property from game.rentals r where r.tenant = pid), (select property from game.players where id = pid)) $$;
 do $$ declare t text; begin
-  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop','countries'] loop
+  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop','countries','rentals'] loop
     execute format('alter table game.%I enable row level security', t);
     execute format('revoke all on game.%I from public', t);
   end loop;
@@ -313,7 +324,7 @@ create or replace function game.pval(j jsonb) returns numeric language sql immut
 create or replace function game.hperk(pid uuid, k text) returns numeric language sql stable as $$
   select case k when 'mug' then least(0.9, t) when 'hosp' then least(0.6, t) when 'jail' then least(0.6, t) when 'travel_disc' then least(1, t)
                 when 'travel_time' then least(0.9, t) when 'heat' then least(1.5, t) when 'travel_free' then least(1, t) when 'travel_fast' then least(1, t) when 'arms' then least(0.5, t) when 'carry' then least(20, t) else t end
-  from (select coalesce((select game.pval(h.perks->k) from game.players p join game.properties h on h.id = p.property where p.id = pid), 0)
+  from (select coalesce((select game.pval(h.perks->k) from game.properties h where h.id = game.home_of(pid)), 0)
              + coalesce((select game.pval(v.perks->k) from game.players p join game.vehicles v on v.id = p.vehicle where p.id = pid), 0)
              + coalesce((select c.max * p.career_rank / 10.0 from game.players p join game.careers c on c.id = p.career where p.id = pid and c.perk = k), 0)
              + coalesce((select t.max * game.cstars(co.rep) / 10.0 from game.players p join game.companies co on co.id = p.company_id
@@ -583,6 +594,10 @@ declare p game.players;
 begin
   perform game.wars_tick();
   p := game.me();
+  -- Rent comes out of a tenant's money as the days go by.
+  if exists (select 1 from game.rentals where tenant = p.id) then
+    perform game.rental_settle((select id from game.rentals where tenant = p.id)); select * into p from game.players where id = p.id;
+  end if;
   perform game.medal_check(p.id);
   return jsonb_build_object(
     'me', to_jsonb(p) || jsonb_build_object('status', game.status(p), 'power', round(game.power(p)),
@@ -1690,6 +1705,8 @@ begin
     mood = least(mood, 250 + (level / 3) * 25 + nw.mood), stamina = least(stamina, 100 + nw.stamina * 1.5),
     home_at = case when nw.sort > cur.sort then null else home_at end where id = p.id;
   if nw.sort > cur.sort then perform game.track(p.id, 'home', 1); end if;
+  -- If you're renting somewhere else, that's still where you live.
+  if exists (select 1 from game.rentals where tenant = p.id) then perform game.home_apply(p.id); end if;
   if nw.price >= 8000000 and nw.sort > cur.sort then
     insert into game.messages(player_id, name, body) values (null, 'The Bugle',
       case nw.id when 'tower' then format('%s just bought Backstreet Tower. Their name is going up on the skyline tonight.', p.name)
@@ -1708,7 +1725,7 @@ language plpgsql security definer set search_path = game, public as $$
 declare p game.players; d jsonb;
 begin
   p := game.me(); perform game.need_still(p);
-  select perks->'daily' into d from game.properties where id = p.property;
+  select perks->'daily' into d from game.properties where id = game.home_of(p.id);
   if d is null then raise exception 'Your home doesn''t come with a daily perk yet. Move up the ladder.'; end if;
   if p.home_at > now() - interval '20 hours' then raise exception 'Already collected. Come back later.'; end if;
   update game.players set home_at = now(), cash = cash + coalesce((d->>'cash')::bigint, 0) where id = p.id;
@@ -3374,6 +3391,214 @@ begin
   return jsonb_build_object('gear', g.id, 'cost', g.price);
 end $$;
 
+-- =====================================================================
+-- PROPERTY PORTFOLIO AND RENTALS
+-- =====================================================================
+-- What a place would normally rent for, per day: about 0.5% of what it costs, so it pays for itself in roughly 200 days.
+create or replace function game.market_rent(price bigint) returns bigint language sql immutable as $$
+  select greatest(5, round(price * 0.005))::bigint $$;
+-- How many places you can own to rent out.
+create or replace function game.rental_limit(lvl int) returns int language sql immutable as $$ select least(25, 1 + lvl / 4) $$;
+-- Mood and stamina limits follow the home you live in.
+create or replace function game.home_apply(pid uuid) returns void language sql as $$
+  update game.players p set max_mood = 250 + (p.level / 3) * 25 + h.mood, max_stamina = 100 + h.stamina,
+    mood = least(p.mood, 250 + (p.level / 3) * 25 + h.mood), stamina = least(p.stamina, 100 + h.stamina * 1.5)
+  from game.properties h where p.id = pid and h.id = game.home_of(pid) $$;
+
+-- Bring one rental up to date: charge the tenant, find or lose a local tenant, pay the owner.
+create or replace function game.rental_settle(rid bigint) returns void language plpgsql as $$
+declare r game.rentals; h game.properties; days numeric; hrs numeric; due bigint; ratio numeric; d numeric; t game.players; paid bigint;
+  names text[] := array['a nurse and her two kids', 'a retired fisherman', 'three uni students', 'a young couple', 'a quiet accountant', 'a tattooist and his dog',
+    'a family of five', 'a man who says he''s in imports', 'two chefs who work nights', 'a widow and a lot of cats', 'a touring musician', 'a builder from up north'];
+begin
+  select * into r from game.rentals where id = rid for update;
+  if not found then return; end if;
+  select * into h from game.properties where id = r.property;
+  ratio := r.rent::numeric / game.market_rent(h.price);
+  days := extract(epoch from now() - coalesce(r.paid_to, now())) / 86400.0;
+  if r.tenant is not null and days > 0 then
+    due := round(r.rent * days);
+    select * into t from game.players where id = r.tenant for update;
+    if t.cash + t.bank >= due then
+      update game.players set cash = cash - least(cash, due), bank = bank - greatest(0, due - cash) where id = t.id;
+      update game.rentals set earned = earned + due, paid_to = now() where id = rid;
+    else
+      -- Can't pay: they lose the place and the owner keeps what they had.
+      paid := t.cash + t.bank;
+      update game.players set cash = 0, bank = 0 where id = t.id;
+      update game.rentals set earned = earned + paid, tenant = null, since = null, paid_to = null, checked_at = now() where id = rid;
+      perform game.home_apply(t.id);
+      perform game.notify(t.id, 'rent', format('You fell behind on the rent for %s and got evicted.', h.name));
+      perform game.notify(r.owner, 'rent', format('%s couldn''t pay the rent on your %s and has been evicted.', t.name, lower(h.name)));
+    end if;
+  elsif r.npc is not null and days > 0 then
+    update game.rentals set earned = earned + round(r.rent * days), paid_to = now() where id = rid;
+    -- Locals move out now and then, and fast if the rent's gone up past what's fair.
+    if random() < 1 - power(1 - least(0.9, 0.03 + greatest(0, ratio - 1) * 0.4), days) then
+      update game.rentals set npc = null, since = null, paid_to = null, checked_at = now() where id = rid;
+      perform game.notify(r.owner, 'rent', format('Your tenants (%s) moved out of your %s.', r.npc, lower(h.name)));
+    end if;
+  elsif r.tenant is null and r.npc is null and r.listed then
+    -- Empty and advertised: the cheaper it is against the going rate, the quicker someone moves in.
+    hrs := extract(epoch from now() - coalesce(r.checked_at, now())) / 3600.0;
+    d := 0.2 * power(greatest(0, 1.6 - ratio) / 0.6, 2.2);
+    if hrs > 0 and random() < 1 - power(1 - least(0.95, d), hrs) then
+      update game.rentals set npc = names[1 + floor(random() * array_length(names, 1))::int], since = now(), paid_to = now(), checked_at = now() where id = rid;
+    else
+      update game.rentals set checked_at = now() where id = rid;
+    end if;
+  end if;
+end $$;
+
+create or replace function game.rentals_settle_owner(pid uuid) returns void language plpgsql as $$
+declare x record;
+begin
+  for x in select id from game.rentals where owner = pid loop perform game.rental_settle(x.id); end loop;
+end $$;
+
+create or replace function public.rentals_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; mine bigint;
+begin
+  p := game.me();
+  perform game.rentals_settle_owner(p.id);
+  select id into mine from game.rentals where tenant = p.id;
+  if mine is not null then perform game.rental_settle(mine); end if;
+  return jsonb_build_object('limit', game.rental_limit(p.level), 'level', p.level,
+    'owned', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'property', r.property, 'name', h.name, 'price', h.price, 'rent', r.rent, 'market', game.market_rent(h.price),
+        'listed', r.listed, 'npc', r.npc, 'tenant', case when t.id is not null then jsonb_build_object('id', t.id, 'name', t.name, 'look', t.look, 'name_color', t.name_color) end,
+        'since', r.since, 'earned', r.earned, 'total', r.total, 'bought_at', r.bought_at, 'value', floor(h.price * 0.7)) order by h.sort desc, r.id)
+      from game.rentals r join game.properties h on h.id = r.property left join game.players t on t.id = r.tenant where r.owner = p.id), '[]'),
+    'renting', (select jsonb_build_object('id', r.id, 'property', r.property, 'name', h.name, 'rent', r.rent, 'since', r.since, 'owner', o.name, 'owner_id', o.id,
+        'perks', h.perks, 'mood', h.mood, 'stamina', h.stamina)
+      from game.rentals r join game.properties h on h.id = r.property join game.players o on o.id = r.owner where r.tenant = p.id),
+    'own_home', p.property,
+    'market', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'property', r.property, 'name', h.name, 'rent', r.rent, 'market', game.market_rent(h.price), 'lvl', h.lvl,
+        'owner', o.name, 'owner_id', o.id, 'perks', h.perks, 'mood', h.mood, 'stamina', h.stamina, 'price', h.price) order by h.sort desc, r.rent)
+      from game.rentals r join game.properties h on h.id = r.property join game.players o on o.id = r.owner
+      where r.listed and r.tenant is null and r.npc is null and r.owner <> p.id), '[]'),
+    'catalogue', (select jsonb_agg(jsonb_build_object('id', h.id, 'name', h.name, 'price', h.price, 'lvl', h.lvl, 'market', game.market_rent(h.price), 'blurb', h.blurb) order by h.sort)
+      from game.properties h where h.price > 0));
+end $$;
+
+create or replace function public.rental_buy(p_property text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; h game.properties; n int; rid bigint;
+begin
+  p := game.me(); perform game.need_still(p);
+  select * into h from game.properties where id = p_property and price > 0;
+  if not found then raise exception 'You can''t buy that.'; end if;
+  if p.level < h.lvl then raise exception 'You need level % to buy there.', h.lvl; end if;
+  select count(*) into n from game.rentals where owner = p.id;
+  if n >= game.rental_limit(p.level) then raise exception 'You can own % rentals at your level. Level up for more.', game.rental_limit(p.level); end if;
+  if p.cash < h.price then raise exception 'That''s %. You have % on you.', game.fmt(h.price), game.fmt(p.cash); end if;
+  update game.players set cash = cash - h.price where id = p.id;
+  insert into game.rentals(owner, property, rent, listed, checked_at, paid) values (p.id, h.id, game.market_rent(h.price), true, now(), h.price) returning id into rid;
+  perform game.track(p.id, 'rental', 1);
+  return jsonb_build_object('id', rid, 'name', h.name, 'rent', game.market_rent(h.price));
+end $$;
+
+create or replace function public.rental_set(p_id bigint, p_rent bigint, p_listed boolean) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; r game.rentals;
+begin
+  p := game.me(); perform game.need_still(p);
+  select * into r from game.rentals where id = p_id and owner = p.id;
+  if not found then raise exception 'That''s not yours.'; end if;
+  if p_rent is null or p_rent < 1 or p_rent > 100000000 then raise exception 'Pick a rent between $1 and $100,000,000 a day.'; end if;
+  perform game.rental_settle(r.id);
+  update game.rentals set rent = p_rent, listed = coalesce(p_listed, listed), checked_at = case when not listed and coalesce(p_listed, listed) then now() else checked_at end where id = r.id;
+  if r.tenant is not null and p_rent <> r.rent then
+    perform game.notify(r.tenant, 'rent', format('%s changed your rent to %s a day.', p.name, game.fmt(p_rent)));
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.rental_evict(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; r game.rentals; h game.properties;
+begin
+  p := game.me(); perform game.need_still(p);
+  select * into r from game.rentals where id = p_id and owner = p.id;
+  if not found then raise exception 'That''s not yours.'; end if;
+  perform game.rental_settle(r.id);
+  select * into r from game.rentals where id = p_id;
+  select * into h from game.properties where id = r.property;
+  if r.tenant is null and r.npc is null then raise exception 'Nobody lives there.'; end if;
+  update game.rentals set tenant = null, npc = null, since = null, paid_to = null, checked_at = now() where id = r.id;
+  if r.tenant is not null then
+    perform game.home_apply(r.tenant);
+    perform game.notify(r.tenant, 'rent', format('%s evicted you from %s.', p.name, lower(h.name)));
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.rental_collect() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; amt bigint;
+begin
+  p := game.me(); perform game.need_still(p);
+  perform game.rentals_settle_owner(p.id);
+  select coalesce(sum(earned), 0) into amt from game.rentals where owner = p.id;
+  if amt < 1 then raise exception 'No rent to collect yet.'; end if;
+  update game.rentals set total = total + earned, earned = 0 where owner = p.id;
+  update game.players set cash = cash + amt where id = p.id;
+  return jsonb_build_object('collected', amt);
+end $$;
+
+create or replace function public.rental_sell(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; r game.rentals; h game.properties; got bigint;
+begin
+  p := game.me(); perform game.need_still(p);
+  perform game.rental_settle(p_id);
+  select * into r from game.rentals where id = p_id and owner = p.id;
+  if not found then raise exception 'That''s not yours.'; end if;
+  select * into h from game.properties where id = r.property;
+  got := floor(h.price * 0.7) + r.earned;
+  delete from game.rentals where id = r.id;
+  if r.tenant is not null then
+    perform game.home_apply(r.tenant);
+    perform game.notify(r.tenant, 'rent', format('%s sold the place you were renting. You''ll need to find somewhere else.', p.name));
+  end if;
+  update game.players set cash = cash + got where id = p.id;
+  return jsonb_build_object('sold', h.name, 'got', got);
+end $$;
+
+-- Renting somewhere to live: you get its perks and limits while you pay rent each day (from cash, then the bank).
+create or replace function public.rental_rent(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; r game.rentals; h game.properties;
+begin
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
+  if exists (select 1 from game.rentals where tenant = p.id) then raise exception 'You''re already renting somewhere. Move out first.'; end if;
+  select * into r from game.rentals where id = p_id for update;
+  if not found or r.tenant is not null or r.npc is not null or not r.listed then raise exception 'Someone beat you to it.'; end if;
+  if r.owner = p.id then raise exception 'That''s yours. You can''t rent it from yourself.'; end if;
+  select * into h from game.properties where id = r.property;
+  if p.level < h.lvl then raise exception 'You need level % to live there.', h.lvl; end if;
+  if p.cash + p.bank < r.rent then raise exception 'You need at least one day''s rent, %.', game.fmt(r.rent); end if;
+  update game.rentals set tenant = p.id, since = now(), paid_to = now() where id = r.id;
+  perform game.home_apply(p.id);
+  perform game.notify(r.owner, 'rent', format('%s moved into your %s at %s a day.', p.name, lower(h.name), game.fmt(r.rent)));
+  return jsonb_build_object('name', h.name, 'rent', r.rent);
+end $$;
+
+create or replace function public.rental_leave() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; r game.rentals; h game.properties;
+begin
+  p := game.me(); perform game.need_still(p);
+  select * into r from game.rentals where tenant = p.id;
+  if not found then raise exception 'You''re not renting anywhere.'; end if;
+  perform game.rental_settle(r.id);
+  select * into h from game.properties where id = r.property;
+  update game.rentals set tenant = null, since = null, paid_to = null, checked_at = now() where id = r.id and tenant = p.id;
+  perform game.home_apply(p.id);
+  perform game.notify(r.owner, 'rent', format('%s moved out of your %s.', p.name, lower(h.name)));
+  return jsonb_build_object('left', h.name);
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -3387,7 +3612,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

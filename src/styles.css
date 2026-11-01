@@ -577,3 +577,8 @@ a.btn{text-decoration:none}
 .bribe{display:flex;flex-direction:column;gap:10px;padding:12px 14px;margin-bottom:12px;border-radius:var(--r-panel);background:var(--brick-soft);border:1px solid color-mix(in srgb,var(--brick) 35%,transparent)}
 .bribe b{color:var(--brick)}
 .tiny.bad{color:var(--brick)}
+.rentals .rental{display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-bottom:1px solid var(--rope)}
+.rentals .rental:last-child{border-bottom:0}
+.rentctl{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-left:60px}
+.big-money{font-size:20px;color:var(--seaglass)}
+@media (max-width:560px){.rentctl{padding-left:0}}

@@ -21,11 +21,12 @@ import { Garage, Career, Medals, Missions, Event } from "./pages/life.jsx";
 import { Companies, Company, WarRoom } from "./pages/business.jsx";
 import { Armoury, Fight } from "./pages/armoury.jsx";
 import { Travel, MODE_ICON } from "./pages/travel.jsx";
+import { Property } from "./pages/property.jsx";
 import { CountrySelect, guessCountry } from "./ui/country.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
-  { group: "Your life", items: [["home", "Home", Ic.Building], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["companies", "Companies", Ic.Factory], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
+  { group: "Your life", items: [["home", "Home", Ic.Building], ["property", "Property", Ic.KeyRound], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["companies", "Companies", Ic.Factory], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
   { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
   { group: "People", items: [["crews", "Crews", Ic.Flag], ["war", "War room", Ic.Siren], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
   { group: "The city", items: [["map", "Map and turf", Ic.Map], ["travel", "Travel the country", Ic.Plane], ["event", "Events", Ic.PartyPopper], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
@@ -163,7 +164,7 @@ function Banned({ b }) {
   );
 }
 
-const PAGES = { travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { property: Property, travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
