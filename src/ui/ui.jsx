@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { IT, RAR, CATN } from "../game/catalog.js";
 import { itemSvg, portraitSvg } from "../game/art.js";
 import { clock, oddsColor } from "../lib/format.js";
+import { scarceLabel } from "../lib/supply.js";
 
 export const Svg = ({ svg, className, style }) => <span className={className} style={style} dangerouslySetInnerHTML={{ __html: svg }} />;
 
@@ -10,6 +11,7 @@ export function ItemThumb({ id, lg }) {
   return <Svg className={`thumb ${lg ? "lg" : ""} r${it ? it.r : 0}`} svg={itemSvg(id)} />;
 }
 export const Rarity = ({ id }) => { const it = IT[id]; return it ? <span className="rar" style={{ color: RAR[it.r][1] }}>{RAR[it.r][0]}</span> : null; };
+export const Scarce = ({ s }) => { const l = scarceLabel(s); return l ? <span className="pill scarce">{l}</span> : null; };
 export const itemName = id => (IT[id] ? IT[id].n : id);
 export const itemCat = id => (IT[id] ? CATN[IT[id].cat] : "");
 

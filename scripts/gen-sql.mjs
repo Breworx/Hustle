@@ -21,9 +21,16 @@ out+="insert into game.jobs(id,name,district,lvl,grit,base,cash_min,cash_max,xp,
 const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
 out+="insert into game.foes(id,name,district,lvl,power,cash_min,cash_max,xp,loot,sort) values\n"+FOES.map((f,i)=>`(${q(slug(f.n))},${q(f.n)},${q(f.d)},${f.lvl},${f.p},${f.cash[0]},${f.cash[1]},${f.xp},${arr(f.loot||[])},${i})`).join(",\n")+
  "\non conflict (id) do update set name=excluded.name,district=excluded.district,lvl=excluded.lvl,power=excluded.power,cash_min=excluded.cash_min,cash_max=excluded.cash_max,xp=excluded.xp,loot=excluded.loot,sort=excluded.sort;\n\n";
-const rows=CAT.map(it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)})`);
-for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop) values\n"+rows.slice(i,i+250).join(",\n")+
- "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop;\n\n";
+// How many of each item can ever exist. Random but fixed per item (seeded by its id), spread on a log scale inside
+// a band for its rarity, so two legendaries can differ wildly: one might have 9 copies, another only 1.
+// Food, consumables and mystery boxes never run out.
+const BANDS=[[1500,12000],[300,2500],[40,400],[5,60],[1,10]];
+const seeded=id=>{let h=2166136261;for(const ch of id){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return ((h>>>0)%100000)/100000};
+const supplyOf=it=>{if(it.id==="founder")return 100;if(["use","food","box"].includes(it.cat))return null;
+  const [lo,hi]=BANDS[it.r],u=seeded(it.id);return Math.max(1,Math.round(Math.exp(Math.log(lo)+u*(Math.log(hi)-Math.log(lo)))))};
+const rows=CAT.map(it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"})`);
+for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply) values\n"+rows.slice(i,i+250).join(",\n")+
+ "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply;\n\n";
 const r2=x=>Math.round(x*100)/100;
 out+="insert into game.stocks(ticker,name,sector,twin,vol,price,prev,history,perk_shares,perk,perk_desc,sort) values\n"+STOCKS.map((s,i)=>{const pct=REAL_1030[s.t];const close=pct!=null?r2(s.base*(1+pct/100)):s.base;
   const hist=pct!=null?[["2026-10-29",s.base,null],["2026-10-30",close,pct]]:[["2026-10-30",s.base,null]];
@@ -31,3 +38,4 @@ out+="insert into game.stocks(ticker,name,sector,twin,vol,price,prev,history,per
  "\non conflict (ticker) do update set name=excluded.name,sector=excluded.sector,twin=excluded.twin,vol=excluded.vol,perk_shares=excluded.perk_shares,perk=excluded.perk,perk_desc=excluded.perk_desc,sort=excluded.sort;\n";
 writeFileSync(new URL("../supabase/02_content.sql",import.meta.url),out);
 console.log("wrote",out.length,"bytes");
+const caps=CAT.map(supplyOf).filter(x=>x!=null);console.log("capped items",caps.length,"one-of-ones",caps.filter(x=>x===1).length,"under 10",caps.filter(x=>x<10).length);

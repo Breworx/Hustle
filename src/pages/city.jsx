@@ -55,7 +55,7 @@ export function Players() {
         <div className="list">{rows.map(p => (
           <button key={p.id} className="li click" onClick={() => go("player/" + p.id)}>
             <Avatar seed={p.id} />
-            <div><div className="t">{p.name}</div><div className="s">Level {p.level}, {rankOf(p.level).toLowerCase()} in {DISTRICT_NAMES[p.district]}</div></div>
+            <div><div className="t">{p.name}</div><div className="s">Level {p.level}, {rankOf(p.level).toLowerCase()} in {DISTRICT_NAMES[p.district]}{p.founder ? `, founder #${p.founder}` : ""}</div></div>
             <div className="act"><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}</span></div>
           </button>))}</div>}
       </Panel>
@@ -77,7 +77,7 @@ export function Profile({ arg }) {
       <div className="panel"><div className="body row" style={{ gap: 18, flexWrap: "wrap" }}>
         <Avatar seed={p.id} lg />
         <div className="grow"><h1>{p.name}</h1><p className="muted">Level {p.level}, {rankOf(p.level).toLowerCase()}. On the street since {new Date(p.created_at).toLocaleDateString("en-NZ", { month: "long", year: "numeric" })}.</p>
-          <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span><span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
+          <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span>{p.founder && <span className="pill scarce"><Ic.Sparkles />Founder #{p.founder}</span>}<span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
           {(p.jail_reason || p.hosp_reason) && <p className="tiny" style={{ marginTop: 6 }}>{p.jail_reason || p.hosp_reason}</p>}</div>
         {!p.is_me && <div className="stack-sm" style={{ alignItems: "flex-end" }}>
           <button className="btn danger" disabled={busy || !canHit} onClick={() => run("attack", { p_target: p.id }, r => { load(); showSheet({ verdict: r.won ? "You won" : "You lost", tone: r.won ? "good" : "bad", title: `You attacked ${r.name}`, story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E`], pic: <Avatar seed={p.id} /> }); })}><Ic.Swords />Attack</button>

@@ -5,6 +5,7 @@ import { itemSvg } from "./game/art.js";
 import { IT, RAR } from "./game/catalog.js";
 import { money } from "./lib/format.js";
 import { Check, Info, TriangleAlert, X } from "./ui/icons.js";
+import { useSupply, scarceLabel } from "./lib/supply.js";
 
 const Ctx = createContext(null);
 export const useGame = () => useContext(Ctx);
@@ -75,6 +76,7 @@ export function GameProvider({ session, children }) {
 // The result of an action, told as a short story with what you gained or lost.
 function ResultSheet({ pic, verdict, tone = "good", title, story, cash, items = [], lines = [], onClose, extra, again }) {
   useEffect(() => { const k = e => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  const sup = useSupply(items.filter(Boolean));
   const col = tone === "good" ? "var(--seaglass)" : tone === "bad" ? "var(--brick)" : "var(--sodium)";
   return (
     <div className="scrim" onClick={onClose}>
@@ -89,7 +91,7 @@ function ResultSheet({ pic, verdict, tone = "good", title, story, cash, items = 
           <div className="gains">
             {cash > 0 && <span className="gain money">+{money(cash)}</span>}
             {items.filter(Boolean).map((id, i) => (
-              <span key={i} className="gain"><Svg svg={itemSvg(id)} />{IT[id]?.n}<span className="rar" style={{ color: RAR[IT[id]?.r || 0][1] }}>{RAR[IT[id]?.r || 0][0]}</span></span>
+              <span key={i} className="gain"><Svg svg={itemSvg(id)} />{IT[id]?.n}<span className="rar" style={{ color: RAR[IT[id]?.r || 0][1] }}>{RAR[IT[id]?.r || 0][0]}</span>{scarceLabel(sup[id]) && <span className="pill scarce">{scarceLabel(sup[id])}</span>}</span>
             ))}
             {lines.map((l, i) => <span key={"l" + i} className="gain">{l}</span>)}
           </div>

@@ -336,7 +336,9 @@ function genItems(){
   F.forEach(([n,s,c,v,u,d],i)=>add(`gd_${i}`,n,"food",v,s,c,null,`${d} ${Object.entries(u).map(([k,x])=>`+${x} ${LBL[k]}`).join(", ")}.`,{u}));
   return out;
 }
-const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx})),...genItems()];
+const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx})),...genItems(),
+ // Never drops. Handed to the first 100 people who create a character, numbered in the order they arrived.
+ {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Backstreet. There will never be another."}];
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];
 const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box"]],["junk","Junk",["junk"]]];

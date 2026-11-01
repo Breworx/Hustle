@@ -8,6 +8,7 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 
 - **Every rule runs on the server.** Game tables live in a private `game` schema the public API can't touch. The browser can only call the `public.*` functions in `supabase/01_schema.sql`, and each one checks who's calling before doing anything. Nobody can give themselves cash from the browser console.
 - **Live updates.** Chat messages and notifications (you were attacked, your item sold) arrive instantly through Supabase Realtime, with polling as a fallback.
+- **Limited items.** Every collectible has a fixed number of copies that will ever exist, from a few thousand for common junk down to a single copy for the rarest. Each drop is like pulling one copy out of a bag holding every copy left, so scarce items are very hard to find and get harder as they're found. Once all copies are out, the only way to get one is from another player. Food, consumables and mystery boxes never run out. The first 100 characters each get a numbered Founder's key.
 - **Real stock moves.** `supabase/03_stock_feed.sql` fetches each real company's close after the US market shuts and moves its game twin by the same percentage.
 
 ## Set it up (about 15 minutes, all doable on an iPad)

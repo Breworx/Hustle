@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase, configured, call } from "./lib/supabase.js";
 import { GameProvider, useGame } from "./state.jsx";
-import { Avatar, Countdown, Meter, Svg } from "./ui/ui.jsx";
+import { Avatar, Countdown, Meter, Svg, ItemThumb } from "./ui/ui.jsx";
 import { skyline, DISTRICT_ART } from "./game/art.js";
 import { rankOf } from "./game/catalog.js";
 import { money } from "./lib/format.js";
@@ -79,16 +79,17 @@ function Auth() {
 }
 
 function CreateCharacter() {
-  const { refresh } = useGame();
+  const { refresh, showSheet } = useGame();
   const [name, setName] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
-    try { await call("create_player", { p_name: name }); await refresh(); } catch (x) { setErr(x.message); } finally { setBusy(false); }
+    try { const r = await call("create_player", { p_name: name }); await refresh();
+      if (r.founder) showSheet({ verdict: `Founder #${r.founder}`, title: "You got here early", story: "You’re one of the first hundred people in Backstreet. There’s a Founder’s key in your stash with your number on it, and a badge on your profile that nobody who comes later can ever get.", items: ["founder"], pic: <ItemThumb id="founder" /> }); } catch (x) { setErr(x.message); } finally { setBusy(false); }
   }
   return (
     <div className="content" style={{ margin: "8vh auto", maxWidth: 520 }}>
       <form className="panel" onSubmit={submit}><div className="body stack">
-        <div className="row"><Avatar seed={name || "new"} lg /><div><h1>Who are you?</h1><p className="muted">Pick the name people on the street will know you by. You can't change it later.</p></div></div>
+        <div className="row"><Avatar seed={name || "new"} lg /><div><h1>Who are you?</h1><p className="muted">Pick the name people on the street will know you by. You can't change it later. The first hundred characters each get a numbered Founder's key.</p></div></div>
         <label className="field">Street name<input className="input" autoFocus maxLength={20} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Ghost" /></label>
         {err && <p className="err">{err}</p>}
         <button className="btn lg" disabled={busy || name.trim().length < 3}>Hit the street</button>

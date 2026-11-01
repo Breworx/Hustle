@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useGame } from "../state.jsx";
-import { Svg, Panel, ItemThumb, Rarity, itemName, itemCat, Empty, Seg, Spark, Qty } from "../ui/ui.jsx";
+import { Svg, Panel, ItemThumb, Rarity, itemName, itemCat, Empty, Seg, Spark, Qty, Scarce } from "../ui/ui.jsx";
+import { useSupply } from "../lib/supply.js";
 import { IT, RAR, FILT, SHOPIDS, CATN } from "../game/catalog.js";
 import { call } from "../lib/supabase.js";
 import { money, num, ago } from "../lib/format.js";
@@ -21,6 +22,7 @@ export function Stash() {
   const cats = FILT.find(x => x[0] === f)[2];
   const items = (state.inventory || []).filter(x => IT[x.item_id] && (!cats || cats.includes(IT[x.item_id].cat)) && (!q || IT[x.item_id].n.toLowerCase().includes(q.toLowerCase())))
     .sort((a, b) => IT[b.item_id].r - IT[a.item_id].r || IT[b.item_id].v - IT[a.item_id].v);
+  const sup = useSupply((state.inventory || []).map(x => x.item_id));
   const total = (state.inventory || []).reduce((s, x) => s + (IT[x.item_id]?.v || 0) * x.qty, 0);
   const kinds = (state.inventory || []).length;
   return (
@@ -36,7 +38,7 @@ export function Stash() {
           <button key={it.id} className="li click" onClick={() => setOpen(it.id)}>
             <ItemThumb id={it.id} />
             <div><div className="t">{it.n} {x.qty > 1 && <span className="muted">×{x.qty}</span>}</div><div className="s"><Rarity id={it.id} /> {CATN[it.cat]}{it.fx ? `, +${it.fx}% power` : ""}</div></div>
-            <div className="act">{eq && <span className="pill good"><Ic.Check />Equipped</span>}<span className="tiny">{money(it.v)}</span></div>
+            <div className="act"><Scarce s={sup[it.id]} />{eq && <span className="pill good"><Ic.Check />Equipped</span>}<span className="tiny">{money(it.v)}</span></div>
           </button>); })}</div>}
       </Panel>
       {open && <ItemSheet id={open} onClose={() => setOpen(null)} />}
@@ -69,6 +71,7 @@ function ItemSheet({ id, onClose }) {
         <div className="head"><ItemThumb id={id} lg /><div className="grow"><div className="verdict" style={{ color: RAR[it.r][1] }}>{RAR[it.r][0]} {CATN[it.cat].toLowerCase()}</div><h2>{it.n}</h2><div className="tiny">You have {have}. Book value {money(it.v)}.</div></div>
           <button className="iconbtn" onClick={onClose} aria-label="Close"><Ic.X /></button></div>
         <p className="story">{it.d}{it.fx ? ` Adds ${it.fx}% to your fight power when equipped.` : ""}</p>
+        {mkt?.supply && <SupplyNote m={mkt} />}
         <div className="stack" style={{ padding: "8px 20px 20px" }}>
           {(canUse(id) || canEquip(id)) && <button className="btn" disabled={busy} onClick={use}>{canEquip(id) ? (eq ? "Unequip" : "Equip") : it.cat === "box" ? "Open it" : id === "oldmap" ? "Go digging" : id === "msgbottle" ? "Open the bottle" : "Use it"}</button>}
           <div className="panel" style={{ boxShadow: "none" }}><div className="body stack-sm">
@@ -84,6 +87,18 @@ function ItemSheet({ id, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// How many exist, how many have been found and how many are still around (the rest were pawned or used).
+function SupplyNote({ m }) {
+  const left = m.supply - m.found;
+  return (
+    <div style={{ padding: "0 20px" }}><div className="perkbox" style={{ borderStyle: "solid" }}>
+      <b>{m.supply === 1 ? "There is only one of these." : `Only ${num(m.supply)} will ever exist.`}</b>
+      <div className="small muted">{left > 0 ? `${num(m.found)} found so far, ${num(left)} still out there to find.` : "Every one has been found. The only way to get one now is from another player."} {num(m.around)} in players' hands.</div>
+      <div className="xpbar"><i style={{ width: Math.min(100, (m.found / m.supply) * 100) + "%" }} /></div>
+    </div></div>
   );
 }
 
@@ -103,6 +118,7 @@ export function Market({ arg }) {
 
 function MarketBrowse() {
   const [f, setF] = useState("all"); const [q, setQ] = useState(""); const [rows, setRows] = useState(null);
+  const sup = useSupply((rows || []).map(r => r.item_id));
   useEffect(() => {
     const cats = FILT.find(x => x[0] === f)[2];
     const t = setTimeout(() => call("market_overview", { p_cats: cats, p_q: q || null }).then(setRows).catch(() => setRows([])), q ? 300 : 0);
@@ -118,7 +134,7 @@ function MarketBrowse() {
       <div className="list">{rows.map(r => { const d = Math.round((r.min_price / r.value - 1) * 100); return (
         <button key={r.item_id} className="li click" onClick={() => go("market/" + r.item_id)}>
           <ItemThumb id={r.item_id} />
-          <div><div className="t">{itemName(r.item_id)}</div><div className="s"><Rarity id={r.item_id} /> {itemCat(r.item_id)}, {num(r.qty)} for sale from {r.listings} seller{r.listings > 1 ? "s" : ""}</div></div>
+          <div><div className="t">{itemName(r.item_id)}</div><div className="s"><Rarity id={r.item_id} /> <Scarce s={sup[r.item_id]} /> {itemCat(r.item_id)}, {num(r.qty)} for sale from {r.listings} seller{r.listings > 1 ? "s" : ""}</div></div>
           <div className="act" style={{ flexDirection: "column", alignItems: "flex-end", gap: 2 }}><b>{money(r.min_price)}</b><span className={`tiny ${d <= -10 ? "good" : d >= 25 ? "bad" : ""}`}>{d === 0 ? "at book value" : `${Math.abs(d)}% ${d < 0 ? "under" : "over"} book`}</span></div>
         </button>); })}</div>}
     </Panel>
@@ -145,6 +161,7 @@ function MarketItem({ id }) {
         <div className="stat"><div className="k">Cheapest now</div><div className="v">{data?.listings?.[0] ? money(data.listings[0].price) : "None listed"}</div></div>
         <div className="stat"><div className="k">Average sale</div><div className="v">{avg ? money(avg) : "No sales yet"}</div></div>
         <div className="stat"><div className="k">Book value</div><div className="v">{money(it.v)}</div></div>
+        {data?.supply && <div className="stat"><div className="k">Found so far</div><div className="v">{num(data.found)} <span className="muted small">of {num(data.supply)}</span></div></div>}
       </div>
       <div className="cols-2">
         <Panel title="For sale" note="Cheapest first. You pay a 3% fee on top." flush>

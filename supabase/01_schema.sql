@@ -39,11 +39,16 @@ create table if not exists game.players(
   last_chat timestamptz
 );
 create unique index if not exists players_name_ci on game.players (lower(name));
+alter table game.players add column if not exists founder int unique;
 create index if not exists players_seen on game.players (last_seen desc);
 
 create table if not exists game.items(
   id text primary key, name text not null, cat text not null, rarity int not null,
   value bigint not null, fx int not null default 0, effect jsonb not null default '{}'::jsonb, shop boolean not null default false);
+-- Limited supply: "supply" is how many of an item can ever be found (null = unlimited, for food and consumables).
+-- "minted" counts how many have been found so far. Once minted reaches supply, the only way to get one is from another player.
+alter table game.items add column if not exists supply int check (supply is null or supply > 0);
+alter table game.items add column if not exists minted int not null default 0;
 
 create table if not exists game.inventory(
   player_id uuid not null references game.players(id) on delete cascade,
@@ -257,17 +262,34 @@ begin
   end if;
 end $$;
 
--- Weighted loot roll: rarer items get likelier with "boost"; cats narrows the pool 70% of the time.
+-- Loot roll. Think of one big bag holding every copy of every item that will ever exist: each drop pulls one out.
+-- An item's chance is simply how many copies are left, so a one-of-one sits among ~1.8 million copies and a
+-- common with 12,000 copies turns up all the time. As copies get found the bag empties and they get rarer still.
+-- "boost" (better districts, the casino vault, bigger boxes) multiplies the odds of each rarity step by (1+boost).
+-- "cats" narrows the bag to some kinds of item 70% of the time. Food and consumables never run out.
+-- Each pick is claimed atomically, so two players can never both get the last copy.
 create or replace function game.roll_item(boost numeric default 0, cats text[] default null) returns text language plpgsql volatile as $$
-declare use_cats boolean := cats is not null and array_length(cats, 1) > 0 and random() < 0.7; r numeric := random(); pick text;
+declare use_cats boolean := cats is not null and array_length(cats, 1) > 0 and random() < 0.7; r numeric; pick text; tries int := 0;
 begin
-  with pool as (select id, rarity from game.items where (not use_cats or cat = any(cats))),
-       cnt as (select rarity, count(*) c from pool group by rarity),
-       wt as (select p.id, (array[620,250,95,30,5])[p.rarity + 1] * power(1 + boost, p.rarity) / c.c as w
-              from pool p join cnt c using (rarity)),
-       cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
-  select id into pick from cum where cw >= r * tw order by cw limit 1;
-  return pick;
+  loop
+    tries := tries + 1; r := random(); pick := null;
+    with wt as (select id, power(1 + boost, rarity) * coalesce(supply - minted, (array[6000,1200,200,30,5])[rarity + 1]) as w
+                from game.items
+                where (not use_cats or cat = any(cats)) and id <> 'founder' and (supply is null or minted < supply)),
+         cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
+    select id into pick from cum where cw >= r * tw order by cw limit 1;
+    if pick is not null then
+      update game.items set minted = minted + 1 where id = pick and (supply is null or minted < supply);
+      if found then return pick; end if;
+    end if;
+    if use_cats and (pick is null or tries >= 3) then use_cats := false;
+    elsif tries >= 8 or pick is null then
+      -- Everything in reach is found. Fall back to something that never runs out.
+      select id into pick from game.items where supply is null and cat = 'food' order by random() limit 1;
+      update game.items set minted = minted + 1 where id = pick;
+      return pick;
+    end if;
+  end loop;
 end $$;
 
 create or replace function game.stock_now(t text, base numeric, vol numeric) returns numeric language sql stable as $$
@@ -286,7 +308,7 @@ $$;
 create or replace function game.card(p game.players) returns jsonb language sql stable as $$
   select jsonb_build_object('id', p.id, 'name', p.name, 'level', p.level, 'district', p.district,
     'status', game.status(p), 'last_seen', p.last_seen, 'wins', p.wins, 'losses', p.losses,
-    'created_at', p.created_at,
+    'created_at', p.created_at, 'founder', p.founder,
     'protected', (p.level < 3 or p.created_at > now() - interval '1 day')) $$;
 
 -- =====================================================================
@@ -294,7 +316,7 @@ create or replace function game.card(p game.players) returns jsonb language sql 
 -- =====================================================================
 create or replace function public.create_player(p_name text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+declare n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); fno int;
 begin
   if auth.uid() is null then raise exception 'Please sign in.'; end if;
   if exists (select 1 from game.players where id = auth.uid()) then raise exception 'You already have a character.'; end if;
@@ -304,8 +326,17 @@ begin
   insert into game.players(id, name) values (auth.uid(), n);
   perform game.give(auth.uid(), 'med', 1); perform game.give(auth.uid(), 'lager', 2); perform game.give(auth.uid(), 'pie', 1);
   perform game.notify(auth.uid(), 'welcome', 'Welcome to the Waterfront. Try a job, hit the gym, and watch your back.');
-  insert into game.messages(player_id, name, body) values (null, 'The Bugle', n || ' just arrived on the Waterfront.');
-  return jsonb_build_object('ok', true);
+  -- The first hundred characters each get a numbered Founder's key.
+  update game.items set minted = minted + 1 where id = 'founder' and minted < supply returning minted into fno;
+  if fno is not null then
+    update game.players set founder = fno where id = auth.uid();
+    perform game.give(auth.uid(), 'founder', 1);
+    perform game.notify(auth.uid(), 'founder', format('You''re Founder #%s. A Founder''s key is in your stash. Only 100 will ever exist.', fno));
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('%s just arrived on the Waterfront. Founder #%s.', n, fno));
+  else
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', n || ' just arrived on the Waterfront.');
+  end if;
+  return jsonb_build_object('ok', true, 'founder', fno);
 end $$;
 
 create or replace function public.get_state() returns jsonb
@@ -733,6 +764,9 @@ begin
   p := game.me();
   return jsonb_build_object(
     'value', (select value from game.items where id = p_item),
+    'supply', (select supply from game.items where id = p_item),
+    'found', (select minted from game.items where id = p_item),
+    'around', coalesce((select sum(qty) from game.inventory where item_id = p_item), 0) + coalesce((select sum(qty) from game.listings where item_id = p_item), 0),
     'listings', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'qty', l.qty, 'price', l.price, 'seller', pl.name, 'mine', l.seller = p.id) order by l.price, l.id)
                  from (select * from game.listings where item_id = p_item order by price, id limit 40) l join game.players pl on pl.id = l.seller), '[]'),
     'sales', coalesce((select jsonb_agg(jsonb_build_object('price', s.price, 'qty', s.qty, 'at', s.at) order by s.at)
@@ -856,6 +890,15 @@ begin
     (select id, player_id, name, body, created_at from game.messages order by id desc limit least(p_limit, 200)) m), '[]');
 end $$;
 
+-- ---------- supply lookup (for badges on limited items) ----------
+create or replace function public.item_supply(p_ids text[]) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+begin
+  perform game.me();
+  return coalesce((select jsonb_object_agg(id, jsonb_build_array(supply, minted)) from game.items
+                   where id = any(p_ids[1:1200]) and supply is not null), '{}');
+end $$;
+
 -- ---------- leaderboard ----------
 create or replace function public.leaderboard(p_by text default 'level') returns jsonb
 language plpgsql security definer set search_path = game, public as $$
@@ -875,7 +918,7 @@ do $$ declare f record; begin
            where n.nspname = 'public' and p.proname in ('create_player','get_state','get_events','do_job','train','fight_npc','attack',
              'list_players','get_profile','jail_list','hosp_list','bust','bail','travel','use_item','shop_buy','pawn','market_list',
              'market_cancel','market_buy','market_overview','market_item','my_listings','stock_board','stock_trade','stock_perk',
-             'bank','chat_send','chat_recent','leaderboard') loop
+             'bank','chat_send','chat_recent','leaderboard','item_supply') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);
