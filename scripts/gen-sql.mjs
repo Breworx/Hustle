@@ -10,6 +10,8 @@ import {SEASONS} from "../src/game/seasons.js";
 import {COMPANIES,COMPANY_STARS} from "../src/game/companies.js";
 import {SHOP_ARMS,AMMO,lootArms} from "../src/game/arms.js";
 import {CITIES,MODES,VEHICLE_TRAVEL,GEAR,CITY_ITEMS,RESTOCK} from "../src/game/travel.js";
+import {COUNTRIES,TOWNS} from "../src/game/world-data.js";
+import {WORLD_ITEMS,theName} from "../src/game/worldgoods.js";
 const q=s=>s==null?"null":"'"+String(s).replace(/'/g,"''")+"'";
 const arr=a=>"array["+a.map(q).join(",")+"]::text[]";
 const MAP={energy:"stamina",happy:"mood",life:"health",nerve:"grit"};
@@ -35,7 +37,8 @@ const BANDS=[[1500,12000],[300,2500],[40,400],[5,60],[1,10]];
 const seeded=id=>{let h=2166136261;for(const ch of id){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return ((h>>>0)%100000)/100000};
 const supplyOf=it=>{if(it.unlimited)return null;if(it.supply)return it.supply;if(it.id==="founder")return 100;if(["use","food","box"].includes(it.cat))return null;
   const [lo,hi]=BANDS[it.r],u=seeded(it.id);return Math.max(1,Math.round(Math.exp(Math.log(lo)+u*(Math.log(hi)-Math.log(lo)))))};
-const rows=CAT.map(it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"},${q(it.season||null)})`);
+const itemRow=it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"},${q(it.season||null)})`;
+const rows=CAT.filter(it=>!it.id.startsWith("w_")).map(itemRow);
 for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season) values\n"+rows.slice(i,i+250).join(",\n")+
  "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season;\n\n";
 const r2=x=>Math.round(x*100)/100;
@@ -103,16 +106,41 @@ out+="insert into game.arms(item_id,slot,dmg,acc,shots,ammo,weight,lvl,price,box
  "\non conflict (item_id) do update set slot=excluded.slot,dmg=excluded.dmg,acc=excluded.acc,shots=excluded.shots,ammo=excluded.ammo,weight=excluded.weight,lvl=excluded.lvl,price=excluded.price,box=excluded.box,effect=excluded.effect,def=excluded.def;\n";}
 
 // Travel: cities, ways to get there, travel gear, vehicles on long trips, and each city's shop.
-out+="insert into game.cities(id,name,island,lat,lon,air,rail,lvl,blurb,sort) values\n"+CITIES.map((c,i)=>`(${q(c.id)},${q(c.n)},${q(c.island)},${c.lat},${c.lon},${!!c.air},${!!c.rail},${c.lvl},${q(c.blurb)},${i})`).join(",\n")+
- "\non conflict (id) do update set name=excluded.name,island=excluded.island,lat=excluded.lat,lon=excluded.lon,air=excluded.air,rail=excluded.rail,lvl=excluded.lvl,blurb=excluded.blurb,sort=excluded.sort;\n";
+const NZB=Object.fromEntries(CITIES.map(c=>[c.id,c]));
+const townRow=(t,i)=>{const [id,n,iso,lat,lon,lvl,fl,part]=t;const nz=NZB[id];const cn=COUNTRIES.find(c=>c[0]===iso)?.[1]||iso;
+  const blurb=nz?nz.blurb:fl&1?`The capital of ${theName(cn)}.`:fl&2?`A city in ${theName(cn)}, with an airport.`:`A town in ${theName(cn)}.`;
+  return `(${q(id)},${q(n)},${q(iso)},${q(String(part))},${lat},${lon},${!!(fl&2)},${!!(fl&4)},${lvl},${q(blurb)},${i+1})`;};
+const cityCols="insert into game.cities(id,name,country,island,lat,lon,air,rail,lvl,blurb,sort) values\n";
+const cityUpd="\non conflict (id) do update set name=excluded.name,country=excluded.country,island=excluded.island,lat=excluded.lat,lon=excluded.lon,air=excluded.air,rail=excluded.rail,lvl=excluded.lvl,blurb=excluded.blurb,sort=excluded.sort;\n";
+const H=CITIES.find(c=>c.id==="home");
+out+=cityCols+`(${q("home")},${q(H.n)},null,'0',${H.lat},${H.lon},true,true,1,${q(H.blurb)},0),\n`+TOWNS.map((t,i)=>[t,i]).filter(([t])=>t[2]==="NZ").map(([t,i])=>townRow(t,i)).join(",\n")+cityUpd;
+out+="insert into game.countries(iso,name,zone,home_lat,home_lon,home_part,hub) values\n"+COUNTRIES.map(c=>`(${q(c[0])},${q(c[1])},${q(c[2])},${c[3]},${c[4]},${q(String(c[5]))},${q(c[6])})`).join(",\n")+
+ "\non conflict (iso) do update set name=excluded.name,zone=excluded.zone,home_lat=excluded.home_lat,home_lon=excluded.home_lon,home_part=excluded.home_part,hub=excluded.hub;\n";
 out+="insert into game.travel_modes(id,name,spec,sort) values\n"+MODES.map((m,i)=>{const {id,n,blurb,...spec}=m;return `(${q(id)},${q(n)},${q(JSON.stringify({...spec,blurb}))}::jsonb,${i})`;}).join(",\n")+
  "\non conflict (id) do update set name=excluded.name,spec=excluded.spec,sort=excluded.sort;\n";
 out+="insert into game.travel_gear(id,name,price,lvl,blurb,sort) values\n"+GEAR.map((g,i)=>`(${q(g.id)},${q(g.n)},${g.price},${g.lvl},${q(g.blurb)},${i})`).join(",\n")+
  "\non conflict (id) do update set name=excluded.name,price=excluded.price,lvl=excluded.lvl,blurb=excluded.blurb,sort=excluded.sort;\n";
 out+=Object.entries(VEHICLE_TRAVEL).map(([id,t])=>`update game.vehicles set travel=${q(JSON.stringify(t))}::jsonb where id=${q(id)};`).join("\n")+"\n";
-out+="delete from game.city_shop where item_id not in ("+CITY_ITEMS.map(it=>q(it.id)).join(",")+");\n";
+out+="delete from game.city_shop where item_id like 'c\\_%' and item_id not in ("+CITY_ITEMS.map(it=>q(it.id)).join(",")+");\n";
 out+="insert into game.city_shop(city,item_id,price,max_stock,restock_mins,stock) values\n"+CITY_ITEMS.map(it=>{const r=RESTOCK[it.r];return `(${q(it.city)},${q(it.id)},${it.price},${r.max},${r.mins},${r.max})`;}).join(",\n")+
  "\non conflict (city,item_id) do update set price=excluded.price,max_stock=excluded.max_stock,restock_mins=excluded.restock_mins;\n";
+// ---- Step 4: the rest of the world. Big, so it has its own file.
+const shopRow=it=>{const r=it.cat==="contraband"?{max:6,mins:30}:RESTOCK[it.r];return `(${q(it.city)},${q(it.id)},${it.price},${r.max},${r.mins},${r.max})`;};
+let wout=`-- =====================================================================
+-- BACKSTREET · step 4 of 4: the rest of the world (${TOWNS.length} towns in ${COUNTRIES.length} countries, ${WORLD_ITEMS.length} local goods).
+-- Generated by scripts/gen-sql.mjs. Safe to re-run. Run it after 02_content.sql.
+-- =====================================================================
+`;
+const wt=TOWNS.map((t,i)=>[t,i]).filter(([t])=>t[2]!=="NZ");
+for(let i=0;i<wt.length;i+=400)wout+=cityCols+wt.slice(i,i+400).map(([t,k])=>townRow(t,k)).join(",\n")+cityUpd;
+const wrows=WORLD_ITEMS.map(it=>itemRow({...it,unlimited:true}));
+for(let i=0;i<wrows.length;i+=500)wout+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season) values\n"+wrows.slice(i,i+500).join(",\n")+
+ "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season;\n";
+for(let i=0;i<WORLD_ITEMS.length;i+=800)wout+="insert into game.city_shop(city,item_id,price,max_stock,restock_mins,stock) values\n"+WORLD_ITEMS.slice(i,i+800).map(shopRow).join(",\n")+
+ "\non conflict (city,item_id) do update set price=excluded.price,max_stock=excluded.max_stock,restock_mins=excluded.restock_mins;\n";
+wout+="delete from game.city_shop where item_id like 'w\\_%' and item_id not in (select id from game.items where id like 'w\\_%');\n";
+writeFileSync(new URL("../supabase/04_world.sql",import.meta.url),wout);
+console.log("world bytes",wout.length);
 writeFileSync(new URL("../supabase/02_content.sql",import.meta.url),out);
 console.log("wrote",out.length,"bytes");
 const caps=CAT.map(supplyOf).filter(x=>x!=null);console.log("capped items",caps.length,"one-of-ones",caps.filter(x=>x===1).length,"under 10",caps.filter(x=>x<10).length);

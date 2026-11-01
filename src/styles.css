@@ -539,11 +539,11 @@ a.btn{text-decoration:none}
 .nzmap .land{fill:var(--deck-3);stroke:var(--rope-2);stroke-width:1.2;stroke-linejoin:round}
 .nzmap .route{stroke:var(--sodium);stroke-width:2;stroke-dasharray:5 4}
 .nzmap .pin{cursor:pointer;outline:none}
-.nzmap .pin circle{fill:var(--mist-2);stroke:var(--deck);stroke-width:2}
+.nzmap .pin circle:not(.hit){fill:var(--mist-2);stroke:var(--deck);stroke-width:2}
 .nzmap .pin text{font:600 11px var(--ui);fill:var(--mist);paint-order:stroke;stroke:var(--deck);stroke-width:3px}
-.nzmap .pin.here circle{fill:var(--seaglass)}
+.nzmap .pin.here circle:not(.hit){fill:var(--seaglass)}
 .nzmap .pin.here text{fill:var(--fog)}
-.nzmap .pin.sel circle{fill:var(--sodium);r:8}
+.nzmap .pin.sel circle:not(.hit){fill:var(--sodium)}
 .nzmap .pin.sel text{fill:var(--sodium);font-weight:750}
 .nzmap .pin.locked{opacity:.45}
 .nzmap .pin:focus-visible circle{stroke:var(--sodium);stroke-width:3}
@@ -558,3 +558,19 @@ a.btn{text-decoration:none}
 .track.roadbar i{position:absolute;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--deck);border:2px solid var(--sodium);display:grid;place-items:center;color:var(--sodium);transition:left 1s linear}
 .track.roadbar i svg{width:14px;height:14px}
 @media (max-width:820px){.travelgrid{grid-template-columns:1fr}.mappanel{position:static}.nzmap{max-height:52vh}}
+.nzmap .pin .hit{fill:transparent;stroke:none}
+.nzmap .pin.home circle:not(.hit){fill:var(--heather)}
+.nzmap .pin.here circle:not(.hit){fill:var(--seaglass)}
+.nzmap .pin.sel circle:not(.hit){fill:var(--sodium)}
+.worldmap{width:100%;height:auto;display:block}
+.worldmap .land{fill:var(--deck-3);stroke:var(--rope-2);stroke-width:.6}
+.worldmap .wdot{fill:var(--mist-2);stroke:var(--deck);stroke-width:1;cursor:pointer}
+.worldmap .wdot.home{fill:var(--heather)}
+.worldmap .wdot.here{fill:var(--seaglass)}
+.worldmap .wdot.sel{fill:var(--sodium)}
+.travelgrid.flip{grid-template-columns:minmax(260px,380px) minmax(0,1fr)}
+.countrylist{max-height:520px;overflow:auto}
+.flag{font-size:26px;line-height:1;width:44px;text-align:center}
+.panel.alley{border-color:color-mix(in srgb,var(--brick) 45%,var(--rope))}
+.panel.alley .ph h2,.panel.alley h3{color:var(--brick)}
+@media (max-width:820px){.travelgrid.flip{grid-template-columns:1fr}.countrylist{max-height:320px}}

@@ -1,6 +1,7 @@
 import {SEASONS,TROPHIES} from "./seasons.js";
 import {SHOP_ARMS,AMMO,ARMS_SHAPES} from "./arms.js";
 import {CITY_ITEMS,TRAVEL_SHAPES} from "./travel.js";
+import {WORLD_ITEMS} from "./worldgoods.js";
 // Shared game content: item art, the 1,000-item catalogue and portraits.
 // Used by the web app for display and by scripts/gen-sql.mjs to seed the database.
 const I={
@@ -77,7 +78,7 @@ function hashS(s){let h=2166136261;for(const ch of s)h=Math.imul(h^ch.charCodeAt
 const LBL={energy:"stamina",nerve:"grit",happy:"mood",life:"health"};
 const RAR=[["Common","#8f98a8"],["Uncommon","#3fbf7f"],["Rare","#4a9df0"],["Very rare","#a978f0"],["Legendary","#f0a83a"]];
 const RW=[620,250,95,30,5];
-const CATN={use:"Consumable",food:"Food & drink",junk:"Junk",elec:"Electronics",jewel:"Jewellery",collect:"Collectible",fossil:"Fossil & relic",weapon:"Weapon",armour:"Armour",box:"Mystery box",plush:"Plushie",figure:"Figurine",stamp:"Stamp",coin:"Old coin",card:"Trading card",record:"Vinyl",comic:"Comic"};
+const CATN={contraband:"Contraband",use:"Consumable",food:"Food & drink",junk:"Junk",elec:"Electronics",jewel:"Jewellery",collect:"Collectible",fossil:"Fossil & relic",weapon:"Weapon",armour:"Armour",box:"Mystery box",plush:"Plushie",figure:"Figurine",stamp:"Stamp",coin:"Old coin",card:"Trading card",record:"Vinyl",comic:"Comic"};
 const SHP={
  cap:c=>`<circle cx="24" cy="24" r="14" fill="${c}"/><circle cx="24" cy="24" r="9" fill="none" stroke="#10141c" stroke-dasharray="2 2"/>`,
  ticket:c=>`<rect x="6" y="15" width="36" height="18" rx="2" fill="${c}"/><path d="M14 15v18" stroke-dasharray="2 2" stroke="#10141c"/><path d="M19 21h17M19 27h12" stroke="#10141c"/>`,
@@ -348,13 +349,13 @@ const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx
    sh:a.sh,c:a.c,c2:"",fx:a.def!=null?Math.round(a.def*0.8):Math.round((a.dmg||0)*(a.shots||1)*0.8),unlimited:true,d:a.d})),
  ...AMMO.map(a=>({id:a.id,n:a.n,cat:"use",r:0,v:Math.round(a.price/a.box*0.6*10)/10,sh:a.sh,c:a.c,c2:"",unlimited:true,d:a.d})),
  {id:"war_trophy",n:"Crew war trophy",cat:"collect",r:3,v:50000,sh:"statue",c:"#e8664f",c2:"",unlimited:true,d:"Handed to everyone on the winning side of a crew war who landed a blow. The engraving lists the other crew's name, misspelled."},
- ...CITY_ITEMS.map(it=>({...it,unlimited:true,fx:it.arms?(it.arms.def!=null?Math.round(it.arms.def*0.8):Math.round(it.arms.dmg*(it.arms.shots||1)*0.8)):undefined})),
+ ...[...CITY_ITEMS,...WORLD_ITEMS].map(it=>({...it,unlimited:true,fx:it.arms?(it.arms.def!=null?Math.round(it.arms.def*0.8):Math.round(it.arms.dmg*(it.arms.shots||1)*0.8)):undefined})),
  ...SEASONS.flatMap(se=>se.items.map(it=>({cat:"collect",c2:"",fx:undefined,...it,season:se.id}))),
  ...TROPHIES.map(it=>({cat:"collect",c2:"",fx:undefined,...it}))];
 Object.assign(SHP,ARMS_SHAPES,TRAVEL_SHAPES);
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];
-const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box"]],["junk","Junk",["junk"]]];
+const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box","contraband"]],["junk","Junk",["junk"]]];
 const RANKS=[[1,"Nobody"],[3,"Street rat"],[5,"Hustler"],[7,"Hood"],[9,"Soldier"],[11,"Enforcer"],[13,"Lieutenant"],[16,"Underboss"],[20,"Boss"],[25,"Kingpin"]];
 const rankOf=l=>{let r=RANKS[0][1];for(const[x,n]of RANKS)if(l>=x)r=n;return r};
 export{I,SHP,RAR,RW,CATN,CAT,IT,SHOPIDS,FILT,NAMES,HATS,SHIRTS,BGS,SKIN,LBL,face,rng,hashS,rankOf,RANKS};

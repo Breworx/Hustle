@@ -5,11 +5,15 @@
 
 // Real minutes per hour of travel in the game world. A 640 km bus ride (9 hours) takes about 46 minutes.
 export const MINUTES_PER_HOUR = 5;
+// The city everyone plays in. On your travel map it sits inside your own country.
+export const HOME_NAME = "Greyhaven";
+// Chance customs find contraband when you cross a border, by how you travel.
+export const CUSTOMS = { intl: 25, cargo: 20, charter: 10, jet: 5, seaplane: 8, sub: 2 };
 export const FERRY = { hours: 3.5, foot: 75, vehicle: 250 }; // crossing Cook Strait by road
 
 // lat/lon place each city on the map and set the distances. Road trips are 1.3× the straight line.
 export const CITIES = [
-  { id: "home", n: "The city", island: "N", lat: -39.93, lon: 175.05, air: true, rail: true, lvl: 1, blurb: "Home. Rain, ferries, and everyone you owe money to." },
+  { id: "home", n: HOME_NAME, island: "N", lat: -39.93, lon: 175.05, air: true, rail: true, lvl: 1, blurb: "Home. Rain, ferries, and everyone you owe money to." },
   { id: "akl", n: "Auckland", island: "N", lat: -36.85, lon: 174.76, air: true, rail: true, lvl: 5, blurb: "Volcanoes, motorways and harbour views you can't afford." },
   { id: "ham", n: "Hamilton", island: "N", lat: -37.79, lon: 175.28, air: true, rail: true, lvl: 3, blurb: "Farm money, student flats and a river that goes all the way through." },
   { id: "tga", n: "Tauranga", island: "N", lat: -37.69, lon: 176.17, air: true, rail: false, lvl: 4, blurb: "Surf, kiwifruit and the biggest port in the country." },
@@ -32,6 +36,7 @@ export const CITIES = [
 // fare: base + per km. cap: how many items you can carry back. needs: rail (both ends), air (both ends) or nothing.
 export const MODES = [
   { id: "walk", n: "Walk", kph: 5, wait: 0, base: 0, km: 0, cap: 4, lvl: 1, ferry: "foot", blurb: "Free, slow and good for the soul. Bring snacks." },
+  { id: "bikehire", n: "Hire a bike", kph: 16, wait: 0.25, base: 15, km: 0.02, cap: 6, lvl: 1, ferry: "foot", blurb: "A rental bike with a basket. About 16 km an hour on the flat, less on the hills." },
   { id: "hitch", n: "Hitchhike", kph: 55, wait: 1, base: 0, km: 0, cap: 6, lvl: 1, ferry: "foot", blurb: "Thumb out on the state highway. Could be quick, could take all day." },
   { id: "stow", n: "Stow away on a truck", kph: 70, wait: 0.5, base: 0, km: 0, cap: 15, lvl: 3, ferry: "free", blurb: "Hide in the back of a freight truck. Free, roomy, and one in five drivers checks the load." },
   { id: "bus", n: "Coach", kph: 70, wait: 0.5, base: 10, km: 0.12, cap: 10, lvl: 1, ferry: "foot", blurb: "Long-distance coach. Cheap, reliable and smells faintly of chips." },
@@ -39,7 +44,10 @@ export const MODES = [
   { id: "rental", n: "Rental car", kph: 90, wait: 0.25, base: 90, km: 0.25, cap: 20, lvl: 4, ferry: "vehicle", road: true, blurb: "A white hatchback with a stranger's sunglasses in the glovebox." },
   { id: "campervan", n: "Campervan hire", kph: 75, wait: 0.25, base: 250, km: 0.35, cap: 40, lvl: 8, ferry: "vehicle", road: true, blurb: "Slow on the hills, but there's room for a lot of shopping." },
   { id: "flight", n: "Domestic flight", kph: 550, wait: 1, base: 80, km: 0.35, cap: 8, lvl: 3, needs: "air", air: true, blurb: "Turboprop or jet, with one checked bag. Only between cities with airports." },
-  { id: "charter", n: "Charter plane", kph: 350, wait: 0.25, base: 1500, km: 6, cap: 20, lvl: 15, air: true, blurb: "Your own small plane and a pilot who lands anywhere with a flat paddock." },
+  { id: "charter", n: "Charter plane", kph: 350, wait: 0.25, base: 1500, km: 6, cap: 20, lvl: 15, air: true, scope: "both", range: 4000, blurb: "Your own small plane and a pilot who lands anywhere with a flat paddock." },
+  // Abroad: only these cross a border.
+  { id: "intl", n: "International flight", kph: 800, wait: 2.5, base: 250, km: 0.09, cap: 12, lvl: 8, needs: "air", air: true, scope: "intl", blurb: "Economy, a middle seat and a meal you won't remember. Customs search one bag in four." },
+  { id: "cargo", n: "Stow away on a cargo ship", kph: 30, wait: 3, base: 0, km: 0, cap: 40, lvl: 10, sea: true, scope: "intl", blurb: "Free, slow and smelly, with room for a lot. One in five gets found by the crew." },
   { id: "own", n: "Your own ride", own: true, blurb: "Whatever's in your garage." },
 ];
 
@@ -49,8 +57,8 @@ export const VEHICLE_TRAVEL = {
   hatch: { kph: 85, cap: 25, fuel: 0.12 }, ute: { kph: 85, cap: 40, fuel: 0.15 }, roadbike: { kph: 105, cap: 8, fuel: 0.1 },
   muscle: { kph: 100, cap: 20, fuel: 0.25 }, suv: { kph: 95, cap: 35, fuel: 0.22 }, sports: { kph: 115, cap: 10, fuel: 0.3 },
   limo: { kph: 90, cap: 25, fuel: 0.35 }, hyper: { kph: 125, cap: 6, fuel: 0.5 },
-  heli: { kph: 220, cap: 12, fuel: 3, air: true }, seaplane: { kph: 300, cap: 20, fuel: 4, air: true },
-  jet: { kph: 750, cap: 50, fuel: 8, air: true }, sub: { kph: 40, cap: 120, fuel: 2, sea: true },
+  heli: { kph: 220, cap: 12, fuel: 3, air: true }, seaplane: { kph: 300, cap: 20, fuel: 4, air: true, scope: "both", range: 2500 },
+  jet: { kph: 750, cap: 50, fuel: 8, air: true, scope: "both" }, sub: { kph: 40, cap: 120, fuel: 2, sea: true, scope: "both" },
 };
 
 // Travel gear: bought once, kept for good.

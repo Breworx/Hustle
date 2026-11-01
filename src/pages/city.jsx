@@ -11,6 +11,7 @@ import { go, DISTRICT_NAMES } from "../lib/nav.js";
 import { bustStory, pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
 import { useStartFight } from "./armoury.jsx";
+import { CountrySelect, flag, countryName } from "../ui/country.jsx";
 
 const STATUS = { ok: ["Out and about", "good"], jail: ["In the cells", "warn"], hosp: ["In A&E", "bad"], travel: ["In a taxi", ""], road: ["On the road", ""], away: ["Out of town", ""] };
 const hasBlock = (holdings, t) => (holdings[t]?.shares || 0) >= (STOCKS.find(s => s.t === t)?.shares || 1e12);
@@ -276,6 +277,7 @@ export function Account() {
   const [theme, setTheme] = useState(() => { try { return localStorage.getItem("bs-theme") || "auto"; } catch (e) { return "auto"; } });
   const [look, setLook] = useState(() => me.look || { skin: 0, hat: 0, shirt: 0, bg: 0, grin: true });
   const [tagline, setTagline] = useState(me.tagline || "");
+  const [country, setCountry] = useState(me.country || "NZ");
   function pickTheme(t) {
     setTheme(t);
     if (t === "auto") { delete document.documentElement.dataset.theme; try { localStorage.removeItem("bs-theme"); } catch (e) {} }
@@ -290,6 +292,10 @@ export function Account() {
     <div className="page">
       <div className="pagehead"><div><h1>Account</h1><p>Signed in as {session.user.email}.</p></div>
         <button className="btn ghost" onClick={() => go("player/" + me.id)}>View my profile</button></div>
+      <Panel title="Your country" note="Your travel map starts here, with Greyhaven placed inside it. You can change it when you're home.">
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><CountrySelect id="acct-country" value={country} onChange={setCountry} />
+          <button className="btn" disabled={busy || country === me.country} onClick={() => run("country_set", { p_country: country }, r => toast(`Your country is now ${r.name}.`, "good"))}>Save</button></div>
+      </Panel>
       <Panel title="Your look" note="Change it whenever you like. It's free.">
         <div className="wardrobe">
           <div className="stack-sm" style={{ alignItems: "center" }}><Avatar seed={me.id} look={look} xl /><span className="tiny">Preview</span></div>

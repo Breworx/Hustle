@@ -292,8 +292,15 @@ alter table game.players add column if not exists trip jsonb not null default '{
 alter table game.players add column if not exists trip_until timestamptz;
 alter table game.players add column if not exists bag int not null default 0;
 alter table game.players add column if not exists travel_gear text[] not null default '{}';
+-- The world: every country, where Greyhaven sits on that country's map, and its main airport town.
+create table if not exists game.countries(iso text primary key, name text not null, zone text not null, home_lat numeric not null, home_lon numeric not null,
+  home_part text not null default '0', hub text);
+alter table game.cities add column if not exists country text;
+create index if not exists cities_country on game.cities (country);
+alter table game.players add column if not exists country text not null default 'NZ';
+alter table game.players add column if not exists search_at timestamptz;
 do $$ declare t text; begin
-  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop'] loop
+  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop','countries'] loop
     execute format('alter table game.%I enable row level security', t);
     execute format('revoke all on game.%I from public', t);
   end loop;
@@ -435,6 +442,12 @@ create or replace function game.status(p game.players) returns text language sql
 
 -- Most things can only be done at home, and not while you're locked up, patched up or on the road.
 -- allow_away: things you can also do in another city (eat, use things).
+-- On the road you can't do anything but chat and message until you arrive.
+create or replace function game.need_still(p game.players) returns void language plpgsql as $$
+begin
+  if p.trip_until > now() then raise exception 'You''re on the road to %. You can do that when you arrive.', coalesce(p.trip->>'to_name', 'somewhere'); end if;
+end $$;
+
 drop function if exists game.need_free(game.players);
 create or replace function game.need_free(p game.players, allow_away boolean default false) returns void language plpgsql as $$
 begin
@@ -529,7 +542,7 @@ $$;
 
 create or replace function game.card(p game.players) returns jsonb language sql stable as $$
   select jsonb_build_object('id', p.id, 'name', p.name, 'level', p.level, 'district', p.district,
-    'status', game.status(p), 'city', p.city, 'last_seen', p.last_seen, 'wins', p.wins, 'losses', p.losses,
+    'status', game.status(p), 'city', p.city, 'country', p.country, 'last_seen', p.last_seen, 'wins', p.wins, 'losses', p.losses,
     'created_at', p.created_at, 'founder', p.founder, 'regular', coalesce(p.regular_until > now(), false),
     'look', p.look, 'name_color', p.name_color, 'backdrop', p.backdrop, 'tagline', p.tagline, 'title', p.title,
     'crew', (select jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag) from game.crews c where c.id = p.crew_id),
@@ -538,7 +551,8 @@ create or replace function game.card(p game.players) returns jsonb language sql 
 -- =====================================================================
 -- public API (what the web app calls)
 -- =====================================================================
-create or replace function public.create_player(p_name text) returns jsonb
+drop function if exists public.create_player(text);
+create or replace function public.create_player(p_name text, p_country text default null) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); fno int;
 begin
@@ -547,7 +561,7 @@ begin
   if char_length(n) < 3 or char_length(n) > 20 or n !~ '^[A-Za-z0-9 _.''-]+$' then
     raise exception 'Names are 3 to 20 letters, numbers, spaces, dots, dashes or apostrophes.'; end if;
   if exists (select 1 from game.players where lower(name) = lower(n)) then raise exception 'Someone on the street already goes by that name.'; end if;
-  insert into game.players(id, name) values (auth.uid(), n);
+  insert into game.players(id, name, country) values (auth.uid(), n, coalesce((select iso from game.countries where iso = upper(p_country)), 'NZ'));
   perform game.give(auth.uid(), 'med', 1); perform game.give(auth.uid(), 'lager', 2); perform game.give(auth.uid(), 'pie', 1);
   perform game.notify(auth.uid(), 'welcome', 'Welcome to the Waterfront. Try a job, hit the gym, and watch your back.');
   -- The first hundred characters each get a numbered Founder's key.
@@ -785,7 +799,7 @@ create or replace function public.bust(p_target uuid) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; t game.players; ch numeric; secs int := 0;
 begin
-  p := game.me(); perform game.need_free(p);
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
   if p_target = p.id then raise exception 'Nice try.'; end if;
   select * into t from game.players where id = p_target for update;
   if not found or t.jail_until is null or t.jail_until <= now() then raise exception 'They''re already out.'; end if;
@@ -813,7 +827,7 @@ create or replace function public.bail() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; cost bigint;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.jail_until is null or p.jail_until <= now() then raise exception 'You''re not in the cells.'; end if;
   cost := ceil(extract(epoch from (p.jail_until - now()))) * p.level * 2;
   if p.cash < cost then raise exception 'Bail is %. You don''t have it on you.', game.fmt(cost); end if;
@@ -897,7 +911,7 @@ create or replace function public.shop_buy(p_item text, p_qty int default 1) ret
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; it game.items; cost bigint; q int := greatest(1, least(coalesce(p_qty, 1), 100));
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into it from game.items where id = p_item and shop;
   if not found then raise exception 'The store doesn''t sell that.'; end if;
   cost := round(it.value * q * (1 - least(0.15, (game.skill_lvl(p.skills, 'trade') - 1) * 0.005)));
@@ -911,7 +925,7 @@ create or replace function public.pawn(p_item text, p_qty int default 1) returns
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; it game.items; q int := greatest(1, coalesce(p_qty, 1)); pay bigint;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into it from game.items where id = p_item;
   if not found then raise exception 'Unknown item.'; end if;
   if it.id = 'founder' then raise exception 'You can''t pawn your Founder''s key. It''s yours for good.'; end if;
@@ -927,7 +941,7 @@ create or replace function public.market_list(p_item text, p_qty int, p_price bi
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; slots int; new_id bigint;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if coalesce(p_qty, 0) < 1 or coalesce(p_price, 0) < 1 then raise exception 'Enter a quantity and a price.'; end if;
   perform game.market_ok(p);
   if p_item = 'founder' then raise exception 'Founder''s keys stay with the founder. They can''t be sold.'; end if;
@@ -944,7 +958,7 @@ create or replace function public.market_cancel(p_id bigint) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; l game.listings;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into l from game.listings where id = p_id and seller = p.id for update;
   if not found then raise exception 'That listing is gone.'; end if;
   delete from game.listings where id = l.id;
@@ -956,7 +970,7 @@ create or replace function public.market_buy(p_id bigint, p_qty int default 1) r
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; l game.listings; q int := greatest(1, coalesce(p_qty, 1)); cost bigint; fee bigint; nm text;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into l from game.listings where id = p_id for update;
   if not found then raise exception 'Someone beat you to it.'; end if;
   if l.seller = p.id then raise exception 'That''s your own listing.'; end if;
@@ -1031,7 +1045,7 @@ create or replace function public.stock_trade(p_ticker text, p_shares bigint) re
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; s game.stocks; px numeric; h game.holdings; amt bigint; fee numeric; basis numeric; q bigint := abs(coalesce(p_shares, 0));
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if q < 1 then raise exception 'Enter how many shares.'; end if;
   select * into s from game.stocks where ticker = p_ticker;
   if not found then raise exception 'Unknown company.'; end if;
@@ -1062,7 +1076,7 @@ create or replace function public.stock_perk(p_ticker text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; s game.stocks; h game.holdings; got text[] := '{}'; c bigint := 0; x text; i int;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into s from game.stocks where ticker = p_ticker;
   select * into h from game.holdings where player_id = p.id and ticker = p_ticker for update;
   if h.shares is null or h.shares < s.perk_shares then raise exception 'You need % shares for this perk.', s.perk_shares; end if;
@@ -1093,7 +1107,7 @@ create or replace function public.bank(p_amount bigint) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; a bigint := coalesce(p_amount, 0);
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if a = 0 then raise exception 'Enter an amount.'; end if;
   if a > 0 and a > p.cash then raise exception 'You only have % on you.', game.fmt(p.cash); end if;
   if a < 0 and -a > p.bank then raise exception 'You only have % in the bank.', game.fmt(p.bank); end if;
@@ -1325,7 +1339,7 @@ create or replace function public.checkin() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; n int; r jsonb;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.streak_day = game.today() then raise exception 'You''ve already collected today''s reward. Come back tomorrow.'; end if;
   n := case when p.streak_day = game.today() - 1 then p.streak + 1 else 1 end;
   r := game.streak_reward(n, p.level);
@@ -1338,7 +1352,7 @@ create or replace function public.goal_claim(p_index int) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; d jsonb; g jsonb; c bigint; bonus boolean := false;
 begin
-  p := game.me(); d := game.daily_ensure(p.id);
+  p := game.me(); perform game.need_still(p); d := game.daily_ensure(p.id);
   g := d->'goals'->p_index;
   if g is null then raise exception 'Unknown goal.'; end if;
   if (g->>'claimed')::boolean then raise exception 'Already collected.'; end if;
@@ -1359,7 +1373,7 @@ create or replace function public.guide_claim(p_step text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; st jsonb; done_all boolean;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select x into st from jsonb_array_elements(game.guide_steps()) x where x->>'k' = p_step;
   if st is null then raise exception 'Unknown step.'; end if;
   if not (p.guide->'done' ? p_step) then raise exception 'Not done yet.'; end if;
@@ -1378,7 +1392,7 @@ create or replace function public.crew_create(p_name text, p_tag text) returns j
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); t text := upper(btrim(coalesce(p_tag, ''))); cid bigint;
 begin
-  p := game.me(); perform game.need_free(p);
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
   if p.crew_id is not null then raise exception 'Leave your crew first.'; end if;
   if p.level < 5 then raise exception 'You need level 5 to start a crew.'; end if;
   if p.cash < 25000 then raise exception 'Starting a crew costs $25,000.'; end if;
@@ -1439,7 +1453,7 @@ create or replace function public.crew_apply(p_id bigint, p_note text default ''
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.crews;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.crew_id is not null then raise exception 'You''re already in a crew.'; end if;
   select * into c from game.crews where id = p_id;
   if not found then raise exception 'That crew has broken up.'; end if;
@@ -1461,7 +1475,7 @@ create or replace function public.crew_decide(p_player uuid, p_accept boolean) r
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; t game.players; c game.crews;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.crew_role not in ('leader', 'officer') then raise exception 'Only the leader and officers can do that.'; end if;
   select * into c from game.crews where id = p.crew_id;
   if not exists (select 1 from game.crew_apps where crew_id = c.id and player_id = p_player) then raise exception 'That application has been withdrawn.'; end if;
@@ -1485,7 +1499,7 @@ create or replace function public.crew_leave() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; nxt uuid; cid bigint;
 begin
-  p := game.me(); cid := p.crew_id;
+  p := game.me(); perform game.need_still(p); cid := p.crew_id;
   if cid is null then raise exception 'You''re not in a crew.'; end if;
   update game.players set crew_id = null, crew_role = null, crew_joined = null where id = p.id;
   if p.crew_role = 'leader' then
@@ -1508,7 +1522,7 @@ create or replace function public.crew_member(p_player uuid, p_action text) retu
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; t game.players;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into t from game.players where id = p_player for update;
   if t.crew_id is distinct from p.crew_id or p.crew_id is null then raise exception 'They''re not in your crew.'; end if;
   if t.id = p.id then raise exception 'Use Leave crew instead.'; end if;
@@ -1542,7 +1556,7 @@ create or replace function public.crew_vault(p_amount bigint, p_to uuid default 
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; a bigint := coalesce(p_amount, 0); t game.players; c game.crews;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.crew_id is null then raise exception 'You''re not in a crew.'; end if;
   if a < 1 then raise exception 'Enter an amount.'; end if;
   select * into c from game.crews where id = p.crew_id for update;
@@ -1662,7 +1676,7 @@ create or replace function public.property_move(p_id text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; cur game.properties; nw game.properties; net bigint;
 begin
-  p := game.me(); perform game.need_free(p);
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
   select * into cur from game.properties where id = p.property;
   select * into nw from game.properties where id = p_id;
   if not found then raise exception 'No such place.'; end if;
@@ -1693,7 +1707,7 @@ create or replace function public.home_collect() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; d jsonb;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select perks->'daily' into d from game.properties where id = p.property;
   if d is null then raise exception 'Your home doesn''t come with a daily perk yet. Move up the ladder.'; end if;
   if p.home_at > now() - interval '20 hours' then raise exception 'Already collected. Come back later.'; end if;
@@ -1751,7 +1765,7 @@ create or replace function public.token_spend(p_what text, p_arg text default nu
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; opt jsonb; cost int; last timestamptz; n text;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select x into opt from jsonb_array_elements(game.token_menu()) x where x->>'id' = p_what;
   if opt is null then raise exception 'Unknown option.'; end if;
   cost := (opt->>'cost')::int;
@@ -2011,7 +2025,7 @@ create or replace function public.season_claim(p_season text, p_year int) return
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; s game.seasons;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into s from game.seasons where id = p_season;
   if not found then raise exception 'Unknown event.'; end if;
   if game.season_end(s, p_year) > now() then raise exception 'That event hasn''t finished yet.'; end if;
@@ -2043,7 +2057,7 @@ create or replace function public.career_join(p_id text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.careers;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.careers where id = p_id;
   if not found then raise exception 'No such career.'; end if;
   if p.career = c.id then raise exception 'You already work there.'; end if;
@@ -2084,7 +2098,7 @@ create or replace function public.vehicle_buy(p_id text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; cur game.vehicles; nw game.vehicles; net bigint;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into cur from game.vehicles where id = p.vehicle;
   select * into nw from game.vehicles where id = p_id;
   if not found then raise exception 'No such vehicle.'; end if;
@@ -2179,7 +2193,7 @@ create or replace function public.mission_start(p_chain text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; l int;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select min(lvl) into l from game.missions where chain = p_chain;
   if l is null then raise exception 'No such story.'; end if;
   if p.mission ? 'chain' then raise exception 'Finish or drop your current story first.'; end if;
@@ -2201,7 +2215,7 @@ create or replace function public.mission_claim() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; m game.missions; r jsonb; last boolean;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if not (p.mission ? 'chain') then raise exception 'You''re not on a story right now.'; end if;
   select * into m from game.missions where chain = p.mission->>'chain' and step = (p.mission->>'step')::int;
   if (p.mission->>'have')::numeric < m.n then raise exception 'Not done yet.'; end if;
@@ -2279,7 +2293,7 @@ language plpgsql security definer set search_path = game, public as $$
 declare p game.players; a game.crews; d game.crews; why text; wid bigint; m record;
 begin
   perform game.wars_tick();
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.crew_role is distinct from 'leader' then raise exception 'Only a crew leader can declare war.'; end if;
   why := game.war_block(p.crew_id, p_crew);
   if why is not null then raise exception '%', why; end if;
@@ -2301,7 +2315,7 @@ create or replace function public.war_surrender() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; w game.wars;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.crew_role is distinct from 'leader' then raise exception 'Only the leader can surrender.'; end if;
   select * into w from game.wars where status = 'active' and p.crew_id in (attacker, defender) limit 1;
   if not found then raise exception 'You''re not at war.'; end if;
@@ -2408,7 +2422,7 @@ create or replace function public.company_start(p_type text, p_name text) return
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; t game.company_types; n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); cid bigint;
 begin
-  p := game.me(); perform game.need_free(p);
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
   if p.company_id is not null then raise exception 'You already work at a company. Leave it first.'; end if;
   select * into t from game.company_types where id = p_type;
   if not found then raise exception 'No such kind of business.'; end if;
@@ -2429,7 +2443,7 @@ create or replace function public.company_apply(p_id bigint, p_note text default
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.company_id is not null then raise exception 'You already work at a company.'; end if;
   select * into c from game.companies where id = p_id;
   if not found then raise exception 'That company has closed down.'; end if;
@@ -2451,7 +2465,7 @@ create or replace function public.company_decide(p_player uuid, p_accept boolean
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies; t game.players;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.companies where owner = p.id;
   if not found then raise exception 'You don''t own a company.'; end if;
   if not exists (select 1 from game.company_apps where company_id = c.id and player_id = p_player) then raise exception 'That application has been withdrawn.'; end if;
@@ -2472,7 +2486,7 @@ create or replace function public.company_staff(p_player uuid, p_action text, p_
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies; t game.players;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.companies where owner = p.id;
   if not found then raise exception 'You don''t own a company.'; end if;
   select * into t from game.players where id = p_player for update;
@@ -2493,7 +2507,7 @@ create or replace function public.company_funds(p_amount bigint) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies; a bigint := coalesce(p_amount, 0);
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.companies where owner = p.id for update;
   if not found then raise exception 'You don''t own a company.'; end if;
   if a = 0 then raise exception 'Enter an amount.'; end if;
@@ -2540,7 +2554,7 @@ create or replace function public.company_leave() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies; refund bigint; m record;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if p.company_id is null then raise exception 'You don''t work at a company.'; end if;
   select * into c from game.companies where id = p.company_id for update;
   if c.owner = p.id then
@@ -2601,7 +2615,7 @@ create or replace function public.company_sell(p_price bigint) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.companies where owner = p.id for update;
   if not found then raise exception 'You don''t own a company.'; end if;
   if p_price is null then
@@ -2620,7 +2634,7 @@ create or replace function public.company_buy(p_id bigint, p_price bigint) retur
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies;
 begin
-  p := game.me(); perform game.need_free(p);
+  p := game.me(); perform game.need_still(p); perform game.need_free(p);
   select * into c from game.companies where id = p_id for update;
   if not found then raise exception 'That company has closed down.'; end if;
   if c.sale_price is null then raise exception 'It''s not for sale. You could make an offer.'; end if;
@@ -2634,7 +2648,7 @@ create or replace function public.company_offer(p_id bigint, p_amount bigint) re
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; c game.companies; t game.company_types;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into c from game.companies where id = p_id;
   if not found then raise exception 'That company has closed down.'; end if;
   select * into t from game.company_types where id = c.type;
@@ -2660,7 +2674,7 @@ create or replace function public.company_offer_decide(p_offer bigint, p_accept 
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; o game.company_offers; c game.companies;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into o from game.company_offers where id = p_offer;
   if not found then raise exception 'That offer has been withdrawn.'; end if;
   select * into c from game.companies where id = o.company_id;
@@ -2749,7 +2763,7 @@ create or replace function public.loadout_set(p_item text, p_remove boolean defa
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   if exists (select 1 from game.fights where attacker = p.id and status = 'on') then raise exception 'Not mid-fight.'; end if;
   return game.loadout_put(p.id, p_item, coalesce(p_remove, false));
 end $$;
@@ -2771,7 +2785,7 @@ create or replace function public.arms_buy(p_item text, p_qty int default 1) ret
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; a game.arms; q int := greatest(1, least(coalesce(p_qty, 1), 100)); cost bigint; units int;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into a from game.arms where item_id = p_item and price is not null;
   if not found then raise exception 'The armoury doesn''t sell that.'; end if;
   if p.level < a.lvl then raise exception 'You need level % to buy that.', a.lvl; end if;
@@ -3065,52 +3079,83 @@ begin
 end $$;
 
 -- =====================================================================
--- TRAVELLING THE COUNTRY
+-- TRAVELLING THE COUNTRY, AND THE WORLD
 -- =====================================================================
--- Straight-line distance between two cities in km.
+-- Straight-line distance between two places in km.
 create or replace function game.km(a game.cities, b game.cities) returns numeric language sql immutable as $$
-  select round((2 * 6371 * asin(sqrt(power(sin(radians(b.lat - a.lat) / 2), 2)
-         + cos(radians(a.lat)) * cos(radians(b.lat)) * power(sin(radians(b.lon - a.lon) / 2), 2))))::numeric, 1) $$;
+  select round((2 * 6371 * asin(least(1, sqrt(power(sin(radians(b.lat - a.lat) / 2), 2)
+         + cos(radians(a.lat)) * cos(radians(b.lat)) * power(sin(radians(b.lon - a.lon) / 2), 2)))))::numeric, 1) $$;
+
+-- A place, as seen by this player. Greyhaven is the same city for everyone, but it sits inside your own country on your map.
+create or replace function game.place(p game.players, cid text) returns game.cities language plpgsql stable as $$
+declare c game.cities; k game.countries;
+begin
+  select * into c from game.cities where id = cid;
+  if c.id = 'home' then
+    select * into k from game.countries where iso = p.country;
+    if found then c.lat := k.home_lat; c.lon := k.home_lon; c.island := k.home_part; end if;
+    c.country := p.country;
+  end if;
+  return c;
+end $$;
+
+-- Whether you're carrying anything customs would take an interest in.
+create or replace function game.contraband(pid uuid) returns int language sql stable as $$
+  select coalesce(sum(v.qty), 0)::int from game.inventory v join game.items i on i.id = v.item_id where v.player_id = pid and i.cat = 'contraband' $$;
 
 -- One way of getting from here to there: how long it takes, what it costs, how much you can carry, and whether you can.
+-- Returns null when that way doesn't go there at all (you can't take the coach to another country).
 create or replace function game.trip_option(p game.players, here game.cities, dest game.cities, m game.travel_modes) returns jsonb language plpgsql stable as $$
-declare s jsonb := m.spec; nm text := m.name; v game.vehicles; air boolean; sea boolean; road boolean; strait boolean := here.island <> dest.island;
+declare s jsonb := m.spec; nm text := m.name; v game.vehicles; air boolean; sea boolean; road boolean; intl boolean; strait boolean;
   dist numeric; kph numeric; hrs numeric; cost numeric; cap int; why text := null; ferry numeric := 0; g text[] := coalesce(p.travel_gear, '{}'); km numeric := game.km(here, dest);
+  scope text; vid text := null; customs int := null;
 begin
   if (s->>'own')::boolean then
     select * into v from game.vehicles where id = p.vehicle;
     if v.id is null or v.travel is null then return null; end if;
+    vid := v.id;
     s := v.travel || jsonb_build_object('ferry', case when v.id in ('bike', 'scooter', 'moped') then 'foot' else 'vehicle' end, 'road', not coalesce((v.travel->>'air')::boolean, false) and not coalesce((v.travel->>'sea')::boolean, false));
     nm := 'Your ' || regexp_replace(v.name, '^(A|An) ', '');
   end if;
+  intl := coalesce(here.country, p.country) <> coalesce(dest.country, p.country);
+  scope := coalesce(s->>'scope', 'dom');
+  if (intl and scope = 'dom') or (not intl and scope = 'intl') then return null; end if;
   air := coalesce((s->>'air')::boolean, false); sea := coalesce((s->>'sea')::boolean, false); road := not air and not sea;
+  strait := not intl and here.island <> dest.island;
   dist := case when air then km when sea then km * 1.5 else km * 1.3 end;
   kph := (s->>'kph')::numeric;
   if m.id = 'walk' and 'boots' = any(g) then kph := kph * 1.4; end if;
   if m.id = 'hitch' and 'sign' = any(g) then kph := kph * 1.25; end if;
-  hrs := dist / kph + coalesce((s->>'wait')::numeric, 0) * case when m.id = 'flight' and 'airpoints' = any(g) then 0.5 else 1 end;
+  hrs := dist / kph + coalesce((s->>'wait')::numeric, 0) * case when m.id in ('flight', 'intl') and 'airpoints' = any(g) then 0.5 else 1 end;
   if strait and road then
-    hrs := hrs + 3.5;
+    -- Another island: the ferry, or a few hours on a boat.
+    hrs := hrs + greatest(3.5, km * 0.004);
     ferry := case s->>'ferry' when 'vehicle' then 250 when 'foot' then 75 else 0 end;
   end if;
   cost := coalesce((s->>'base')::numeric, 0) + coalesce((s->>'km')::numeric, (s->>'fuel')::numeric, 0) * dist;
   if (m.id = 'bus' and 'buspass' = any(g)) or (m.id = 'train' and 'railpass' = any(g)) then cost := 0; end if;
-  if m.id = 'flight' and 'airpoints' = any(g) then cost := cost * 0.7; end if;
+  if m.id in ('flight', 'intl') and 'airpoints' = any(g) then cost := cost * 0.7; end if;
   cost := round(cost + ferry);
   cap := (s->>'cap')::int
-    + case when m.id in ('walk', 'hitch', 'bus') and 'pack' = any(g) then 6 else 0 end
+    + case when m.id in ('walk', 'hitch', 'bus', 'bikehire') and 'pack' = any(g) then 6 else 0 end
     + case when (m.id in ('rental', 'campervan') or ((s->>'road')::boolean and m.id = 'own')) and 'roofbox' = any(g) then 10 else 0 end
-    + case when m.id = 'flight' and 'airpoints' = any(g) then 6 else 0 end;
+    + case when m.id in ('flight', 'intl') and 'airpoints' = any(g) then 6 else 0 end;
+  if intl then customs := coalesce(case m.id when 'intl' then 25 when 'cargo' then 20 when 'charter' then 10 end, case vid when 'jet' then 5 when 'seaplane' then 8 when 'sub' then 2 end, 15); end if;
   if p.level < coalesce((s->>'lvl')::int, 1) then why := format('From level %s.', s->>'lvl');
   elsif s->>'needs' = 'rail' and not (here.rail and dest.rail) then why := 'No train line between these two.';
+  elsif s->>'needs' = 'rail' and strait then why := 'No train across the water.';
   elsif s->>'needs' = 'air' and not (here.air and dest.air) then why := 'No airport at one end.';
+  elsif (s->>'range') is not null and dist > (s->>'range')::numeric then why := format('Out of range (%s km).', s->>'range');
   elsif p.bag > cap then why := format('You''re carrying %s things. This only fits %s.', p.bag, cap);
   elsif p.cash < cost then why := 'You can''t afford it.';
   end if;
   return jsonb_build_object('mode', m.id, 'name', nm, 'ok', why is null, 'why', why, 'minutes', greatest(1, round(hrs * 5)), 'cost', cost, 'cap', cap,
-    'ferry', strait and road, 'km', round(dist), 'blurb', coalesce(case when (m.spec->>'own')::boolean then v.blurb end, s->>'blurb'),
-    'risk', case when m.id = 'stow' then case when 'manifest' = any(g) then 5 else 20 end when m.id = 'hitch' then -1 end);
+    'ferry', strait and road, 'km', round(dist), 'blurb', coalesce(case when (m.spec->>'own')::boolean then v.blurb end, s->>'blurb'), 'intl', intl, 'customs', customs,
+    'risk', case when m.id in ('stow', 'cargo') then case when m.id = 'stow' and 'manifest' = any(g) then 5 when m.id = 'cargo' then 20 else 20 end when m.id = 'hitch' then -1 end);
 end $$;
+
+create or replace function game.trip_options(p game.players, here game.cities, dest game.cities) returns jsonb language sql stable as $$
+  select coalesce(jsonb_agg(o order by (o->>'minutes')::int), '[]') from (select game.trip_option(p, here, dest, m) o from game.travel_modes m) z where o is not null $$;
 
 create or replace function game.city_restock(c text) returns void language sql as $$
   update game.city_shop s set stock = least(s.max_stock, s.stock + x.n),
@@ -3118,28 +3163,47 @@ create or replace function game.city_restock(c text) returns void language sql a
   from (select item_id, floor(extract(epoch from now() - stocked_at) / 60 / restock_mins)::int n from game.city_shop where city = c) x
   where s.city = c and s.item_id = x.item_id and x.n > 0 $$;
 
+-- Everything the travel page needs: where you are, the towns in this country with every way to reach them, and every other country.
 create or replace function public.travel_state() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players; here game.cities; onroad boolean;
+declare p game.players; here game.cities; onroad boolean; ctry text; hubs jsonb;
 begin
   p := game.me();
-  select * into here from game.cities where id = p.city;
+  here := game.place(p, p.city);
+  ctry := coalesce(here.country, p.country);
   onroad := p.trip_until > now();
-  return jsonb_build_object('city', p.city, 'trip', p.trip, 'trip_until', p.trip_until, 'on_road', onroad, 'bag', p.bag,
+  return jsonb_build_object('city', p.city, 'country', ctry, 'country_name', (select name from game.countries where iso = ctry), 'home_country', p.country,
+    'home_name', (select name from game.cities where id = 'home'),
+    'trip', p.trip, 'trip_until', p.trip_until, 'on_road', onroad, 'bag', p.bag, 'contraband', game.contraband(p.id),
     'cap', coalesce((p.trip->>'cap')::int, 0), 'blocked', case when p.jail_until > now() then 'You''re in the cells.' when p.hosp_until > now() then 'You''re in A&E.'
       when p.travel_until > now() then 'You''re still in the taxi.' when onroad then null
       when exists (select 1 from game.fights where attacker = p.id and status = 'on') then 'You''re in the middle of a fight.' end,
     'gear', (select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'price', g.price, 'lvl', g.lvl, 'blurb', g.blurb, 'owned', g.id = any(p.travel_gear)) order by g.sort) from game.travel_gear g),
     'cities', (select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'island', c.island, 'lat', c.lat, 'lon', c.lon, 'air', c.air, 'rail', c.rail, 'lvl', c.lvl, 'blurb', c.blurb,
         'km', round(game.km(here, c)), 'here', c.id = p.city,
-        'options', case when c.id = p.city or onroad then '[]'::jsonb else
-          coalesce((select jsonb_agg(o order by (o->>'minutes')::int) from (select game.trip_option(p, here, c, m) o from game.travel_modes m) z where o is not null), '[]') end,
-        'goods', (select count(*) from game.city_shop s where s.city = c.id)) order by c.sort) from game.cities c));
+        'options', case when c.id = p.city or onroad then '[]'::jsonb else game.trip_options(p, here, c) end,
+        'goods', (select count(*) from game.city_shop s where s.city = c.id)) order by c.sort)
+      from game.cities x cross join lateral game.place(p, x.id) c where x.country = ctry or (x.id = 'home' and p.country = ctry)),
+    'countries', (select jsonb_agg(jsonb_build_object('iso', k.iso, 'name', k.name, 'zone', k.zone, 'hub', k.hub, 'hub_name', h.name,
+        'km', round(game.km(here, h)), 'home', k.iso = p.country, 'here', k.iso = ctry) order by k.name)
+      from game.countries k join game.cities h on h.id = k.hub));
+end $$;
+
+-- Every way to reach one place, anywhere in the world.
+create or replace function public.travel_quote(p_city text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; dest game.cities;
+begin
+  p := game.me();
+  dest := game.place(p, p_city);
+  if dest.id is null then raise exception 'No such place.'; end if;
+  return jsonb_build_object('city', dest.id, 'name', dest.name, 'country', dest.country, 'lvl', dest.lvl, 'blurb', dest.blurb,
+    'options', case when dest.id = p.city or p.trip_until > now() then '[]'::jsonb else game.trip_options(p, game.place(p, p.city), dest) end);
 end $$;
 
 create or replace function public.travel_go(p_city text, p_mode text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players; here game.cities; dest game.cities; m game.travel_modes; o jsonb; mins numeric; fine bigint;
+declare p game.players; here game.cities; dest game.cities; m game.travel_modes; o jsonb; mins numeric; fine bigint; held int := 0; seized int := 0; seized_value bigint := 0;
 begin
   perform game.fights_tick();
   p := game.me();
@@ -3148,15 +3212,15 @@ begin
   if p.travel_until > now() then raise exception 'You''re still in the taxi.'; end if;
   if p.trip_until > now() then raise exception 'You''re already on the road.'; end if;
   if exists (select 1 from game.fights where attacker = p.id and status = 'on') then raise exception 'Finish your fight first.'; end if;
-  select * into dest from game.cities where id = p_city;
-  if not found then raise exception 'No such place.'; end if;
+  dest := game.place(p, p_city);
+  if dest.id is null then raise exception 'No such place.'; end if;
   if dest.id = p.city then raise exception 'You''re already here.'; end if;
   if p.level < dest.lvl then raise exception '% opens up at level %.', dest.name, dest.lvl; end if;
-  select * into here from game.cities where id = p.city;
+  here := game.place(p, p.city);
   select * into m from game.travel_modes where id = p_mode;
   if not found then raise exception 'You can''t get there that way.'; end if;
   o := game.trip_option(p, here, dest, m);
-  if o is null then raise exception 'You don''t have a ride.'; end if;
+  if o is null then raise exception 'You can''t get there that way.'; end if;
   if not (o->>'ok')::boolean then raise exception '%', o->>'why'; end if;
   if m.id = 'stow' and random() * 100 < (o->>'risk')::int then
     -- The driver checked the load.
@@ -3164,15 +3228,79 @@ begin
     update game.players set cash = cash - fine, heat = least(100, heat + 10) where id = p.id;
     return jsonb_build_object('caught', true, 'fine', fine, 'to', dest.name);
   end if;
+  if m.id = 'cargo' and random() * 100 < (o->>'risk')::int then
+    fine := least(p.cash, 500 + round((o->>'km')::numeric * 0.2));
+    update game.players set cash = cash - fine, heat = least(100, heat + 15) where id = p.id;
+    return jsonb_build_object('caught', true, 'ship', true, 'fine', fine, 'to', dest.name);
+  end if;
   mins := (o->>'minutes')::numeric;
   if m.id = 'hitch' then mins := greatest(1, round(mins * (0.6 + random() * 0.8))); end if;
+  -- Crossing a border with contraband: customs might search you. They take it all, fine you, and hold you for a while.
+  if (o->>'intl')::boolean and game.contraband(p.id) > 0 and random() * 100 < (o->>'customs')::int then
+    select coalesce(sum(v.qty), 0), coalesce(sum(v.qty * i.value), 0) into seized, seized_value
+      from game.inventory v join game.items i on i.id = v.item_id where v.player_id = p.id and i.cat = 'contraband';
+    delete from game.inventory v using game.items i where i.id = v.item_id and v.player_id = p.id and i.cat = 'contraband';
+    fine := least(p.cash - (o->>'cost')::bigint, round(seized_value * 0.5));
+    held := 20 + floor(random() * 40)::int;
+    mins := mins + held;
+    update game.players set cash = cash - greatest(0, fine), heat = least(100, heat + 25), bag = greatest(0, bag - seized) where id = p.id;
+    perform game.notify(p.id, 'customs', format('Customs found %s things in your bags. They took the lot, fined you %s and held you for %s minutes.', seized, game.fmt(greatest(0, fine)), held));
+  end if;
   update game.players set cash = cash - (o->>'cost')::bigint, city = dest.id, trip_until = now() + make_interval(mins => mins::int),
     trip = jsonb_build_object('from', here.id, 'from_name', here.name, 'to', dest.id, 'to_name', dest.name, 'mode', m.id, 'name', o->>'name',
-      'cap', (o->>'cap')::int, 'minutes', mins, 'cost', (o->>'cost')::bigint, 'started', now()),
+      'cap', (o->>'cap')::int, 'minutes', mins, 'cost', (o->>'cost')::bigint, 'started', now(), 'country', dest.country,
+      'country_name', (select name from game.countries where iso = dest.country), 'held', held),
     bag = case when dest.id = 'home' then 0 else bag end where id = p.id;
   if m.id = 'train' and 'railpass' = any(p.travel_gear) then perform game.give(p.id, 'pie', 1); end if;
   perform game.track(p.id, 'trip', 1); perform game.track(p.id, 'trip:' || dest.id, 1);
-  return jsonb_build_object('to', dest.name, 'minutes', mins, 'cost', (o->>'cost')::bigint, 'mode', o->>'name', 'ferry', (o->>'ferry')::boolean);
+  if (o->>'intl')::boolean then perform game.track(p.id, 'abroad', 1); end if;
+  return jsonb_build_object('to', dest.name, 'minutes', mins, 'cost', (o->>'cost')::bigint, 'mode', o->>'name', 'ferry', (o->>'ferry')::boolean,
+    'searched', seized > 0, 'seized', seized, 'fine', case when seized > 0 then greatest(0, fine) end, 'held', held);
+end $$;
+
+-- Pick your country (at sign-up, or later from your account while you're home).
+create or replace function public.country_set(p_country text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; k game.countries;
+begin
+  p := game.me();
+  select * into k from game.countries where iso = upper(p_country);
+  if not found then raise exception 'Pick a country from the list.'; end if;
+  if p.city <> 'home' or p.trip_until > now() then raise exception 'Change it when you''re back home.'; end if;
+  update game.players set country = k.iso where id = p.id;
+  return jsonb_build_object('country', k.iso, 'name', k.name);
+end $$;
+
+-- Wander the back streets of a town: you might turn up something local, or the police might turn up you.
+create or replace function public.city_search() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.cities; r numeric; it text; fine bigint; cap int;
+begin
+  p := game.me();
+  if p.city = 'home' then raise exception 'Try a job instead. This is for when you''re out of town.'; end if;
+  if p.trip_until > now() then raise exception 'You haven''t arrived yet.'; end if;
+  if p.jail_until > now() or p.hosp_until > now() then raise exception 'Not right now.'; end if;
+  if p.stamina < 10 then raise exception 'You need 10 stamina.'; end if;
+  if p.search_at > now() - interval '90 seconds' then raise exception 'Give it a minute. The locals are watching.'; end if;
+  cap := coalesce((p.trip->>'cap')::int, 0);
+  if p.bag >= cap then raise exception 'Your bags are full.'; end if;
+  c := game.place(p, p.city);
+  update game.players set stamina = stamina - 10, search_at = now() where id = p.id;
+  r := random();
+  if r < 0.15 then
+    fine := least(p.cash, 50 + p.level * 40);
+    update game.players set cash = cash - fine, heat = least(100, heat + 8) where id = p.id;
+    return jsonb_build_object('caught', true, 'fine', fine, 'city', c.name);
+  elsif r < 0.5 then
+    return jsonb_build_object('found', null, 'city', c.name);
+  end if;
+  -- Mostly cheap local things; contraband only turns up in the main town.
+  select s.item_id into it from game.city_shop s join game.items i on i.id = s.item_id
+    where s.city = p.city order by case when i.rarity >= 3 then random() * 20 when i.cat = 'contraband' then random() * 4 else random() end limit 1;
+  if it is null then return jsonb_build_object('found', null, 'city', c.name); end if;
+  perform game.give(p.id, it, 1);
+  update game.players set bag = bag + 1 where id = p.id;
+  return jsonb_build_object('found', it, 'city', c.name);
 end $$;
 
 create or replace function public.city_shop() returns jsonb
@@ -3215,7 +3343,7 @@ create or replace function public.travel_gear_buy(p_gear text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; g game.travel_gear;
 begin
-  p := game.me();
+  p := game.me(); perform game.need_still(p);
   select * into g from game.travel_gear where id = p_gear;
   if not found then raise exception 'No such thing.'; end if;
   if g.id = any(p.travel_gear) then raise exception 'You already have one.'; end if;
@@ -3238,7 +3366,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

@@ -21,6 +21,7 @@ import { Garage, Career, Medals, Missions, Event } from "./pages/life.jsx";
 import { Companies, Company, WarRoom } from "./pages/business.jsx";
 import { Armoury, Fight } from "./pages/armoury.jsx";
 import { Travel, MODE_ICON } from "./pages/travel.jsx";
+import { CountrySelect, guessCountry } from "./ui/country.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
@@ -120,10 +121,10 @@ function Auth() {
 
 function CreateCharacter() {
   const { refresh, showSheet } = useGame();
-  const [name, setName] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false); const [country, setCountry] = useState(guessCountry);
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
-    try { const r = await call("create_player", { p_name: name }); await refresh();
+    try { const r = await call("create_player", { p_name: name, p_country: country }); await refresh();
       if (r.founder) showSheet({ verdict: `Founder #${r.founder}`, title: "You got here early", story: "You’re one of the first hundred people in Backstreet. There’s a Founder’s key in your stash with your number on it, and a badge on your profile that nobody who comes later can ever get.", items: ["founder"], pic: <ItemThumb id="founder" /> }); } catch (x) { setErr(x.message); } finally { setBusy(false); }
   }
   return (
@@ -131,6 +132,7 @@ function CreateCharacter() {
       <form className="panel" onSubmit={submit}><div className="body stack">
         <div className="row"><Avatar seed={name || "new"} lg /><div><h1>Who are you?</h1><p className="muted">Pick the name people on the street will know you by. You can't change it later. The first hundred characters each get a numbered Founder's key.</p></div></div>
         <label className="field">Street name<input className="input" autoFocus maxLength={20} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Ghost" /></label>
+        <label className="field">Where you're from<CountrySelect value={country} onChange={setCountry} /><span className="tiny">Your travel map starts in your own country. Everyone shares the same home city, Greyhaven.</span></label>
         {err && <p className="err">{err}</p>}
         <button className="btn lg" disabled={busy || name.trim().length < 3}>Hit the street</button>
         <button type="button" className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
@@ -265,7 +267,7 @@ function StatusBanner() {
   if (me.status === "hosp") return <div className="banner hosp"><Ic.HeartPulse /><span className="grow"><b>In A&amp;E</b> for <Countdown until={me.hosp_until} onDone={refresh} />. {me.hosp_reason}</span>
     {inv.med > 0 && <button className="btn sm" onClick={() => run("use_item", { p_item: "med" })}>Use a first-aid kit ({inv.med})</button>}</div>;
   if (me.status === "road") { const I = MODE_ICON[me.trip?.mode] || Ic.Car; return <div className="banner travel"><I /><span className="grow"><b>On the road</b> to {me.trip?.to_name} by {(me.trip?.name || "").toLowerCase()}, arriving in <Countdown until={me.trip_until} onDone={refresh} />.</span><button className="btn sm ghost" onClick={() => go("travel")}>Trip</button></div>; }
-  if (me.status === "away") return <div className="banner travel"><Ic.MapPin /><span className="grow"><b>In {me.trip?.to_name}.</b> Jobs, the gym and fights are back home. Shop the local goods, then head back.</span><button className="btn sm" onClick={() => go("travel")}>Shop and travel</button></div>;
+  if (me.status === "away") return <div className="banner travel"><Ic.MapPin /><span className="grow"><b>In {me.trip?.to_name}{me.trip?.country_name && me.trip?.country !== me.country ? `, ${me.trip.country_name}` : ""}.</b> Jobs, the gym and fights are back in Greyhaven. Shop the local goods, then head back.</span><button className="btn sm" onClick={() => go("travel")}>Shop and travel</button></div>;
   if (me.status === "travel") return <div className="banner travel"><Ic.Car /><span className="grow"><b>In a taxi</b> to {DISTRICT_NAMES[me.travel_to]}, arriving in <Countdown until={me.travel_until} onDone={refresh} />.</span></div>;
   return null;
 }
