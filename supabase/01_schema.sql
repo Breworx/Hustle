@@ -225,6 +225,19 @@ alter table game.players add column if not exists company_wage bigint not null d
 alter table game.players add column if not exists company_at timestamptz;
 alter table game.players add column if not exists company_joined timestamptz;
 alter table game.players add column if not exists company_shifts int not null default 0;
+-- Selling companies: an asking price anyone can pay, or offers the owner can take.
+alter table game.companies add column if not exists sale_price bigint check (sale_price is null or sale_price > 0);
+alter table game.companies add column if not exists listed_at timestamptz;
+create table if not exists game.company_offers(id bigint generated always as identity primary key, company_id bigint not null references game.companies(id) on delete cascade,
+  buyer uuid not null references game.players(id) on delete cascade, amount bigint not null check (amount > 0), at timestamptz not null default now(), unique (company_id, buyer));
+create table if not exists game.company_sales(id bigint generated always as identity primary key, company_id bigint references game.companies(id) on delete set null,
+  name text not null, type text not null, stars int not null, seller uuid references game.players(id) on delete set null, buyer uuid references game.players(id) on delete set null,
+  price bigint not null, at timestamptz not null default now());
+do $$ declare t text; begin
+  foreach t in array array['company_offers','company_sales'] loop
+    execute format('alter table game.%I enable row level security', t); execute format('revoke all on game.%I from public', t);
+  end loop;
+end $$;
 do $$ declare t text; begin
   foreach t in array array['company_types','company_stars','companies','company_apps','company_log'] loop
     execute format('alter table game.%I enable row level security', t); execute format('revoke all on game.%I from public', t);
@@ -2131,6 +2144,7 @@ create or replace function game.player_stats(pid uuid) returns jsonb language sq
     'events', coalesce((select sum(points) from game.season_points where player_id = p.id), 0), 'power', round(game.power(p)),
     'warhits', (select count(*) from game.war_hits where player_id = p.id and pts > 1),
     'company', coalesce((select game.cstars(rep) from game.companies where owner = p.id), 0),
+    'company_sold', (select count(*) from game.company_sales where seller = p.id),
     'warwins', (select count(distinct h.war_id) from game.war_hits h join game.wars w on w.id = h.war_id where h.player_id = p.id and w.winner = h.crew_id))
   from game.players p where p.id = pid $$;
 
@@ -2372,10 +2386,13 @@ declare p game.players;
 begin
   p := game.me();
   return jsonb_build_object('mine', p.company_id,
+    'recent_sales', coalesce((select jsonb_agg(jsonb_build_object('name', x.name, 'type', x.type, 'stars', x.stars, 'price', x.price, 'at', x.at,
+        'seller', (select name from game.players where id = x.seller), 'buyer', (select name from game.players where id = x.buyer)) order by x.id desc)
+      from (select * from game.company_sales order by id desc limit 10) x), '[]'),
     'types', (select jsonb_agg(to_jsonb(t) || jsonb_build_object('count', (select count(*) from game.companies c where c.type = t.id)) order by t.sort) from game.company_types t),
     'stars', (select jsonb_agg(rep order by stars) from game.company_stars),
     'companies', coalesce((select jsonb_agg(x order by x.stars desc, x.staff desc) from (
-      select c.id, c.name, c.type, game.cstars(c.rep) stars, (select count(*) from game.players m where m.company_id = c.id) staff,
+      select c.id, c.name, c.type, game.cstars(c.rep) stars, (select count(*) from game.players m where m.company_id = c.id) staff, c.sale_price, game.company_value(c.id) value,
              game.company_cap(game.cstars(c.rep)) + 1 cap, (select name from game.players where id = c.owner) owner,
              exists (select 1 from game.company_apps a where a.company_id = c.id and a.player_id = p.id) applied
       from game.companies c limit 300) x), '[]'));
@@ -2397,6 +2414,12 @@ begin
     'revenue_me', case when mine then game.company_revenue(t, st, p.level) end,
     'can_shift', mine and (p.company_at is null or p.company_at < now() - interval '20 hours'), 'next_shift', case when mine then p.company_at + interval '20 hours' end,
     'applied', exists (select 1 from game.company_apps where company_id = c.id and player_id = p.id),
+    'sale_price', c.sale_price, 'listed_at', c.listed_at, 'value', game.company_value(c.id),
+    'my_offer', (select jsonb_build_object('id', id, 'amount', amount, 'at', at) from game.company_offers where company_id = c.id and buyer = p.id),
+    'offers', case when boss then coalesce((select jsonb_agg(game.card(b) || jsonb_build_object('offer_id', o.id, 'amount', o.amount, 'at', o.at, 'cash', b.cash, 'can_afford', b.cash >= o.amount) order by o.amount desc)
+               from game.company_offers o join game.players b on b.id = o.buyer where o.company_id = c.id), '[]') end,
+    'sales', coalesce((select jsonb_agg(jsonb_build_object('price', x.price, 'at', x.at, 'seller', (select name from game.players where id = x.seller),
+               'buyer', (select name from game.players where id = x.buyer)) order by x.id desc) from game.company_sales x where x.company_id = c.id), '[]'),
     'owner', (select game.card(o) from game.players o where o.id = c.owner),
     'staff', coalesce((select jsonb_agg(game.card(m) || jsonb_build_object('wage', case when mine then m.company_wage end, 'shifts', m.company_shifts,
                'worked_today', m.company_at > now() - interval '20 hours', 'joined', m.company_joined, 'is_owner', m.id = c.owner,
@@ -2561,6 +2584,122 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+
+-- ---------- buying and selling companies ----------
+-- A rough guide to what a company is worth: half its start-up cost, its money in the bank, its stars and its staff.
+create or replace function game.company_value(cid bigint) returns bigint language sql stable as $$
+  select (floor(t.cost * 0.5) + c.funds + floor(t.cost * 0.12 * (game.cstars(c.rep) - 1))
+          + (select count(*) from game.players m where m.company_id = c.id and m.id <> c.owner) * t.base * 5)::bigint
+  from game.companies c join game.company_types t on t.id = c.type where c.id = cid $$;
+
+create or replace function game.company_transfer(cid bigint, nb uuid, price bigint) returns void language plpgsql as $$
+declare c game.companies; t game.company_types; b game.players; sel game.players; m record; st int;
+begin
+  select * into c from game.companies where id = cid for update;
+  select * into t from game.company_types where id = c.type;
+  select * into b from game.players where id = nb for update;
+  select * into sel from game.players where id = c.owner for update;
+  if b.id = c.owner then raise exception 'You already own it.'; end if;
+  if b.level < t.lvl then raise exception '% needs level % to own a %.', b.name, t.lvl, lower(t.name); end if;
+  if b.company_id is not null and b.company_id <> cid then raise exception '% works at another company. They''d need to leave first.', b.name; end if;
+  if b.cash < price then raise exception '% doesn''t have % on them.', b.name, game.fmt(price); end if;
+  st := game.cstars(c.rep);
+  -- The seller gets the price less a 5% broker's fee. The company's funds and staff go with it.
+  update game.players set cash = cash - price, company_id = cid, company_wage = 0, company_joined = coalesce(case when company_id = cid then company_joined end, now()) where id = b.id;
+  update game.players set cash = cash + floor(price * 0.95) where id = sel.id;
+  update game.players set company_id = null, company_wage = 0, company_joined = null, company_shifts = 0 where id = sel.id and company_id = cid;
+  update game.companies set owner = b.id, sale_price = null, listed_at = null where id = cid;
+  delete from game.company_offers where company_id = cid;
+  delete from game.company_offers where buyer = b.id;
+  delete from game.company_apps where player_id = b.id;
+  insert into game.company_sales(company_id, name, type, stars, seller, buyer, price) values (cid, c.name, c.type, st, sel.id, b.id, price);
+  perform game.company_note(cid, format('%s sold the company to %s for %s.', sel.name, b.name, game.fmt(price)));
+  perform game.notify(sel.id, 'company', format('You sold %s to %s for %s. After the 5%% broker''s fee you got %s.', c.name, b.name, game.fmt(price), game.fmt(floor(price * 0.95))));
+  perform game.notify(b.id, 'company', format('%s is yours. The staff and the %s in the bank come with it.', c.name, game.fmt(c.funds)));
+  for m in select id from game.players where company_id = cid and id <> b.id loop perform game.notify(m.id, 'company', format('%s has a new owner: %s.', c.name, b.name)); end loop;
+  perform game.track(b.id, 'company', 1);
+  if price >= 1000000 then
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('Business news: %s has bought %s from %s for %s.', b.name, c.name, sel.name, game.fmt(price)));
+  end if;
+end $$;
+
+create or replace function public.company_sell(p_price bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies;
+begin
+  p := game.me();
+  select * into c from game.companies where owner = p.id for update;
+  if not found then raise exception 'You don''t own a company.'; end if;
+  if p_price is null then
+    update game.companies set sale_price = null, listed_at = null where id = c.id;
+    perform game.company_note(c.id, format('%s took the company off the market.', p.name));
+    return jsonb_build_object('listed', false);
+  end if;
+  if p_price < 1000 or p_price > 100000000000 then raise exception 'Pick an asking price between $1,000 and $100 billion.'; end if;
+  update game.companies set sale_price = p_price, listed_at = coalesce(listed_at, now()) where id = c.id;
+  perform game.company_note(c.id, format('%s put the company up for sale at %s.', p.name, game.fmt(p_price)));
+  perform game.notify(x.id, 'company', format('%s is up for sale. If someone buys it, they''ll be your new boss.', c.name)) from game.players x where x.company_id = c.id and x.id <> p.id;
+  return jsonb_build_object('listed', true, 'price', p_price);
+end $$;
+
+create or replace function public.company_buy(p_id bigint, p_price bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies;
+begin
+  p := game.me(); perform game.need_free(p);
+  select * into c from game.companies where id = p_id for update;
+  if not found then raise exception 'That company has closed down.'; end if;
+  if c.sale_price is null then raise exception 'It''s not for sale. You could make an offer.'; end if;
+  -- The price you saw has to match, so a last-second price rise can't catch you out.
+  if c.sale_price <> p_price then raise exception 'The asking price just changed to %. Have another look.', game.fmt(c.sale_price); end if;
+  perform game.company_transfer(c.id, p.id, c.sale_price);
+  return jsonb_build_object('bought', c.id, 'price', c.sale_price);
+end $$;
+
+create or replace function public.company_offer(p_id bigint, p_amount bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; t game.company_types;
+begin
+  p := game.me();
+  select * into c from game.companies where id = p_id;
+  if not found then raise exception 'That company has closed down.'; end if;
+  select * into t from game.company_types where id = c.type;
+  if c.owner = p.id then raise exception 'That''s your company.'; end if;
+  if p.level < t.lvl then raise exception 'You need level % to own one of these.', t.lvl; end if;
+  if coalesce(p_amount, 0) < 1000 then raise exception 'Offers start at $1,000.'; end if;
+  if p_amount > p.cash then raise exception 'You''d need % on you for that offer to stand.', game.fmt(p_amount); end if;
+  insert into game.company_offers(company_id, buyer, amount) values (c.id, p.id, p_amount)
+    on conflict (company_id, buyer) do update set amount = excluded.amount, at = now();
+  perform game.notify(c.owner, 'company', format('%s offered %s for %s.', p.name, game.fmt(p_amount), c.name));
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_offer_cancel(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me(); delete from game.company_offers where company_id = p_id and buyer = p.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_offer_decide(p_offer bigint, p_accept boolean) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; o game.company_offers; c game.companies;
+begin
+  p := game.me();
+  select * into o from game.company_offers where id = p_offer;
+  if not found then raise exception 'That offer has been withdrawn.'; end if;
+  select * into c from game.companies where id = o.company_id;
+  if c.owner <> p.id then raise exception 'That''s not your company.'; end if;
+  if not p_accept then
+    delete from game.company_offers where id = o.id;
+    perform game.notify(o.buyer, 'company', format('%s turned down your offer for %s.', p.name, c.name));
+    return jsonb_build_object('ok', true);
+  end if;
+  perform game.company_transfer(c.id, o.buyer, o.amount);
+  return jsonb_build_object('sold', true, 'price', o.amount);
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -2571,7 +2710,8 @@ do $$ declare f record; begin
              'goals_state','checkin','goal_claim','guide_claim','crew_create','crew_list','crew_get','crew_apply','crew_withdraw','crew_decide',
              'crew_leave','crew_member','crew_vault','crew_motto','dm_send','dm_threads','dm_thread','contact_toggle','report',
              'property_list','property_move','home_collect','turf_state','season_state','season_claim','war_declare','war_surrender','war_state','company_list','company_get','company_start','company_apply','company_withdraw',
-             'company_decide','company_staff','company_funds','company_shift','company_leave','career_state','career_join','career_shift',
+             'company_decide','company_staff','company_funds','company_shift','company_leave',
+             'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
              'admin_resolve','admin_delete_message') loop
     execute format('revoke all on function %s from public', f.sig);

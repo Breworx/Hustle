@@ -25,15 +25,28 @@ export function Companies() {
     <div className="page">
       <div className="pagehead"><div><h1>Companies</h1><p>Legitimate businesses run by players. Get a job at one, or start your own and hire. Everyone works one shift a day: the company earns money, the owner pays wages from it, and every shift builds reputation towards the next star. More stars mean more money, more staff and a stronger perk for everyone who works there.</p></div>
         <div className="row" style={{ flexWrap: "wrap" }}>{state.company && <button className="btn" onClick={() => go("company/" + state.company.id)}><Ic.Briefcase />{state.company.name}</button>}
-          <Seg label="Companies" value={tab} onChange={setTab} options={[["browse", "Find a job"], ["start", "Start a business"]]} /></div></div>
-      {tab === "browse" ? (
+          <Seg label="Companies" value={tab} onChange={setTab} options={[["browse", "Find a job"], ["sale", `For sale (${d.companies.filter(c => c.sale_price).length})`], ["start", "Start a business"]]} /></div></div>
+      {tab === "sale" ? (<>
+        <Panel flush title="Businesses for sale" note="Buy one and it's yours: the staff, the money in the bank and the stars. The seller pays a 5% broker's fee.">
+          {d.companies.filter(c => c.sale_price).length === 0 ? <Empty title="Nothing's for sale right now">You can still make an offer on any company from its page.</Empty> :
+          <div className="list">{d.companies.filter(c => c.sale_price).map(c => { const t = T[c.type]; const TI = TYPE_ICON[c.type] || Ic.Briefcase; const deal = c.sale_price < c.value; return (
+            <button key={c.id} className="li click" onClick={() => go("company/" + c.id)}>
+              <span className="thumb homepic"><TI /></span>
+              <div><div className="t">{c.name}</div><div className="s">{t.name}, owned by {c.owner}. {c.staff} staff.</div><Stars n={c.stars} /></div>
+              <div className="act" style={{ flexDirection: "column", alignItems: "flex-end", gap: 2 }}><b>{money(c.sale_price)}</b><span className={`tiny ${deal ? "good" : ""}`}>Worth about {money(c.value)}</span></div>
+            </button>); })}</div>}
+        </Panel>
+        {d.recent_sales.length > 0 && <Panel title="Recent deals" flush><div className="list">{d.recent_sales.map((x, i) => (
+          <div key={i} className="li"><Ic.Banknote style={{ width: 18, color: "var(--seaglass)" }} /><div><div className="t small">{x.buyer} bought {x.name} from {x.seller}</div><div className="s">{T[x.type]?.name}, {x.stars} star{x.stars === 1 ? "" : "s"}</div></div>
+            <div className="act" style={{ flexDirection: "column", alignItems: "flex-end", gap: 2 }}><b>{money(x.price)}</b><span className="tiny">{ago(x.at)}</span></div></div>))}</div></Panel>}
+      </>) : tab === "browse" ? (
         <Panel flush title="Companies in the city">
           {d.companies.length === 0 ? <Empty title="No companies yet">Be the first. Start a business and hire the street.</Empty> :
           <div className="list">{d.companies.map(c => { const t = T[c.type]; const TI = TYPE_ICON[c.type] || Ic.Briefcase; return (
             <div key={c.id} className="li">
               <span className="thumb homepic"><TI /></span>
               <div><button style={linkBtn} onClick={() => go("company/" + c.id)}>{c.name}</button>
-                <div className="s">{t.name}, owned by {c.owner}. {c.staff} of {c.cap} staff. Perk for staff: {PERK_TEXT[t.perk](t.max * c.stars / 10)}.</div><Stars n={c.stars} /></div>
+                <div className="s">{t.name}, owned by {c.owner}. {c.staff} of {c.cap} staff. Perk for staff: {PERK_TEXT[t.perk](t.max * c.stars / 10)}.</div><div className="row" style={{ gap: 8 }}><Stars n={c.stars} />{c.sale_price && <span className="pill warn">For sale, {money(c.sale_price)}</span>}</div></div>
               <div className="act">{d.mine === c.id ? <span className="pill good">You work here</span> : d.mine ? null : c.applied ? <button className="btn ghost sm" disabled={busy} onClick={() => run("company_withdraw", { p_id: c.id }, load)}>Withdraw</button>
                 : <button className="btn sm" disabled={busy || c.staff >= c.cap} onClick={() => run("company_apply", { p_id: c.id, p_note: "" }, () => { load(); toast(`Application sent to ${c.name}.`, "good"); })}>{c.staff >= c.cap ? "Full" : "Apply"}</button>}</div>
             </div>); })}</div>}
@@ -56,8 +69,9 @@ export function Companies() {
 }
 
 export function Company({ arg }) {
-  const { me, run, busy, toast, showSheet, refresh } = useGame();
+  const { me, state, run, busy, toast, showSheet, refresh } = useGame();
   const [c, setC] = useState(null); const [err, setErr] = useState(""); const [amt, setAmt] = useState(""); const [wages, setWages] = useState({}); const [closing, setClosing] = useState(false);
+  const [ask, setAsk] = useState(""); const [offer, setOffer] = useState(""); const [buying, setBuying] = useState(false);
   const load = () => call("company_get", { p_id: +arg }).then(setC).catch(e => setErr(e.message));
   useEffect(() => { load(); }, [arg]);
   if (err) return <Empty title={err} />;
@@ -82,6 +96,22 @@ export function Company({ arg }) {
           {!c.mine && !me.company_id && (c.applied ? <span className="pill" style={{ alignSelf: "flex-start" }}>Application sent</span> : <button className="btn" style={{ alignSelf: "flex-start" }} disabled={busy || c.staff.length >= c.cap} onClick={() => act("company_apply", { p_id: c.id, p_note: "" }, "Application sent.")}>Apply for a job</button>)}
         </div>
       </div></div>
+
+      {!c.boss && <Panel title={c.sale_price ? `For sale: ${money(c.sale_price)}` : "Buy this business"}
+        note={c.sale_price ? `Worth about ${money(c.value)}, going by its start-up cost, money in the bank, stars and staff.` : `It's not on the market, but you can make the owner an offer. Worth about ${money(c.value)}.`}>
+        <div className="stack-sm">
+          {c.sale_price && (buying
+            ? <div className="row" style={{ flexWrap: "wrap" }}><span className="small">Buy {c.name} for {money(c.sale_price)}? You get its {c.staff.length - 1} staff and everything in its account.</span>
+                <button className="btn good" disabled={busy} onClick={() => run("company_buy", { p_id: c.id, p_price: c.sale_price }, () => { setBuying(false); load(); refresh(); showSheet({ verdict: "It's yours", title: c.name, story: `You sign the papers in the back office. The keys are heavier than you expected. ${c.staff.length - 1 ? "The staff are waiting to meet their new boss." : ""}`, pic: <span className="thumb homepic"><TI /></span> }); })}>Buy it</button>
+                <button className="btn ghost" onClick={() => setBuying(false)}>Not yet</button></div>
+            : <div><button className="btn good" disabled={me.cash < c.sale_price || me.level < t.lvl || (me.company_id && me.company_id !== c.id)} onClick={() => setBuying(true)}><Ic.Banknote />Buy it for {money(c.sale_price)}</button>
+                {me.level < t.lvl ? <span className="tiny"> You need level {t.lvl}.</span> : me.company_id && me.company_id !== c.id ? <span className="tiny"> Leave your current job first.</span> : me.cash < c.sale_price ? <span className="tiny"> You have {money(me.cash)} on you.</span> : null}</div>)}
+          {me.company_id && me.company_id !== c.id && <p className="tiny">You already {state.company?.owner ? "own a business" : "work somewhere else"}. You can make an offer, but you'll need to {state.company?.owner ? "sell or close yours" : "leave your job"} before the deal can go through.</p>}
+          {c.my_offer ? <div className="row" style={{ flexWrap: "wrap" }}><span className="small">You've offered {money(c.my_offer.amount)} ({ago(c.my_offer.at)}).</span><button className="btn ghost sm" disabled={busy} onClick={() => act("company_offer_cancel", { p_id: c.id }, "Offer withdrawn.")}>Withdraw offer</button></div>
+            : <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}><label className="field">Your offer<input className="input" type="number" inputMode="numeric" min={1000} value={offer} onChange={e => setOffer(e.target.value)} placeholder={String(Math.round(c.value * 0.9))} style={{ maxWidth: 180 }} /></label>
+                <button className="btn ghost" disabled={busy || !(+offer >= 1000) || +offer > me.cash} onClick={() => act("company_offer", { p_id: c.id, p_amount: +offer }, `Offer sent to ${c.owner?.name}.`)}>Make an offer</button></div>}
+        </div>
+      </Panel>}
 
       {c.mine && <div className="stats">
         <div className="stat"><div className="k">Company funds</div><div className="v">{money(c.funds)}</div></div>
@@ -112,6 +142,21 @@ export function Company({ arg }) {
             </div>))}</div>
         </Panel>
         {c.mine && <div className="stack">
+          {c.boss && <Panel title="Sell the business" note={`Worth about ${money(c.value)}. The buyer gets the staff and the ${money(c.funds)} in the bank. You pay a 5% broker's fee.`}>
+            <div className="stack-sm">
+              {c.sale_price ? <div className="row" style={{ flexWrap: "wrap" }}><span className="pill warn">Listed at {money(c.sale_price)} {ago(c.listed_at)}</span>
+                <button className="btn ghost sm" disabled={busy} onClick={() => act("company_sell", { p_price: null }, "Taken off the market.")}>Take it off the market</button></div> : null}
+              <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}><label className="field">{c.sale_price ? "Change the asking price" : "Asking price"}<input className="input" type="number" inputMode="numeric" min={1000} value={ask} onChange={e => setAsk(e.target.value)} placeholder={String(c.value)} style={{ maxWidth: 180 }} /></label>
+                <button className="btn" disabled={busy || !(+ask >= 1000)} onClick={() => act("company_sell", { p_price: +ask }, `Listed for ${money(+ask)}.`)}>{c.sale_price ? "Update price" : "Put it up for sale"}</button></div>
+              {c.offers?.length > 0 && <div className="list" style={{ borderTop: "1px solid var(--rope)", marginTop: 6 }}>{c.offers.map(o => (
+                <div key={o.offer_id} className="li" style={{ paddingLeft: 0, paddingRight: 0 }}><Avatar seed={o.id} look={o.look} />
+                  <div><div className="t"><Name p={o} /> offers {money(o.amount)}</div><div className="s">{ago(o.at)}{o.can_afford ? "" : ". They don't have the cash on them right now."}</div></div>
+                  <div className="act"><button className="btn sm good" disabled={busy || !o.can_afford} onClick={() => run("company_offer_decide", { p_offer: o.offer_id, p_accept: true }, () => { refresh(); toast(`Sold to ${o.name} for ${money(o.amount)}.`, "good"); go("companies"); })}>Accept</button>
+                    <button className="btn ghost sm" disabled={busy} onClick={() => act("company_offer_decide", { p_offer: o.offer_id, p_accept: false })}>Decline</button></div>
+                </div>))}</div>}
+            </div>
+          </Panel>}
+          {c.sales?.length > 0 && <Panel title="Ownership history" flush><div className="list">{c.sales.map((x, i) => <div key={i} className="li"><Ic.Banknote style={{ width: 16, color: "var(--mist)" }} /><div className="s" style={{ color: "var(--fog)" }}>{x.buyer} bought it from {x.seller} for {money(x.price)}.</div><div className="act tiny">{ago(x.at)}</div></div>)}</div></Panel>}
           {c.boss && <Panel title="Company money" note="Wages come out of this. If it runs dry, staff go unpaid.">
             <div className="stack-sm">
               <input className="input" type="number" inputMode="numeric" min={1} value={amt} onChange={e => setAmt(e.target.value)} placeholder="Amount" aria-label="Amount" />

@@ -77,6 +77,7 @@ export const MEDAL_SETS = [
   { stat: "founder", what: () => "Be one of the first 100 players", at: [1], names: ["Founder"] },
   { stat: "events", what: n => `Earn ${n.toLocaleString("en-NZ")} points in seasonal events`, at: [100, 1000, 5000], names: ["Party goer", "Festival regular", "Life of every party"] },
   { stat: "company", what: n => `Own a ${n}-star company`, at: [1, 5, 10], names: ["Entrepreneur", "Business owner", "Captain of industry"] },
+  { stat: "company_sold", what: n => `Sell ${n} compan${n > 1 ? "ies" : "y"}`, at: [1, 5], names: ["Cashed out", "Serial entrepreneur"] },
   { stat: "warhits", what: n => `Land ${n} hits in crew wars`, at: [10, 100, 500], names: ["Frontline", "Shock trooper", "One-person army"] },
   { stat: "warwins", what: n => `Be on the winning side of ${n} crew war${n > 1 ? "s" : ""}`, at: [1, 5, 20, 50], names: ["Blooded", "War veteran", "Warlord", "Conqueror"] },
   { stat: "power", what: n => `Reach ${n.toLocaleString("en-NZ")} fight power`, at: [100, 500, 1000, 5000, 10000, 50000], names: ["Toughened", "Hard case", "Wall", "Tank", "Titan", "Force of nature"] },

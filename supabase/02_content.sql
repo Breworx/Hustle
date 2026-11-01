@@ -1179,7 +1179,7 @@ on conflict (id) do update set name=excluded.name,price=excluded.price,lvl=exclu
 delete from game.vehicles where id not in ('foot','bike','scooter','moped','hatch','ute','roadbike','muscle','suv','sports','limo','hyper','heli','seaplane','jet','sub');
 update game.players set vehicle = 'foot' where vehicle not in (select id from game.vehicles);
 
--- Medals: 136.
+-- Medals: 138.
 insert into game.medals(id,stat,at,name,what,tier,tiers,sort) values
 ('level_2','level',2,'Off the street','Reach level 2',1,9,1),
 ('level_5','level',5,'Known face','Reach level 5',2,9,2),
@@ -1304,19 +1304,21 @@ insert into game.medals(id,stat,at,name,what,tier,tiers,sort) values
 ('company_1','company',1,'Entrepreneur','Own a 1-star company',1,3,121),
 ('company_5','company',5,'Business owner','Own a 5-star company',2,3,122),
 ('company_10','company',10,'Captain of industry','Own a 10-star company',3,3,123),
-('warhits_10','warhits',10,'Frontline','Land 10 hits in crew wars',1,3,124),
-('warhits_100','warhits',100,'Shock trooper','Land 100 hits in crew wars',2,3,125),
-('warhits_500','warhits',500,'One-person army','Land 500 hits in crew wars',3,3,126),
-('warwins_1','warwins',1,'Blooded','Be on the winning side of 1 crew war',1,4,127),
-('warwins_5','warwins',5,'War veteran','Be on the winning side of 5 crew wars',2,4,128),
-('warwins_20','warwins',20,'Warlord','Be on the winning side of 20 crew wars',3,4,129),
-('warwins_50','warwins',50,'Conqueror','Be on the winning side of 50 crew wars',4,4,130),
-('power_100','power',100,'Toughened','Reach 100 fight power',1,6,131),
-('power_500','power',500,'Hard case','Reach 500 fight power',2,6,132),
-('power_1000','power',1000,'Wall','Reach 1,000 fight power',3,6,133),
-('power_5000','power',5000,'Tank','Reach 5,000 fight power',4,6,134),
-('power_10000','power',10000,'Titan','Reach 10,000 fight power',5,6,135),
-('power_50000','power',50000,'Force of nature','Reach 50,000 fight power',6,6,136)
+('company_sold_1','company_sold',1,'Cashed out','Sell 1 company',1,2,124),
+('company_sold_5','company_sold',5,'Serial entrepreneur','Sell 5 companies',2,2,125),
+('warhits_10','warhits',10,'Frontline','Land 10 hits in crew wars',1,3,126),
+('warhits_100','warhits',100,'Shock trooper','Land 100 hits in crew wars',2,3,127),
+('warhits_500','warhits',500,'One-person army','Land 500 hits in crew wars',3,3,128),
+('warwins_1','warwins',1,'Blooded','Be on the winning side of 1 crew war',1,4,129),
+('warwins_5','warwins',5,'War veteran','Be on the winning side of 5 crew wars',2,4,130),
+('warwins_20','warwins',20,'Warlord','Be on the winning side of 20 crew wars',3,4,131),
+('warwins_50','warwins',50,'Conqueror','Be on the winning side of 50 crew wars',4,4,132),
+('power_100','power',100,'Toughened','Reach 100 fight power',1,6,133),
+('power_500','power',500,'Hard case','Reach 500 fight power',2,6,134),
+('power_1000','power',1000,'Wall','Reach 1,000 fight power',3,6,135),
+('power_5000','power',5000,'Tank','Reach 5,000 fight power',4,6,136),
+('power_10000','power',10000,'Titan','Reach 10,000 fight power',5,6,137),
+('power_50000','power',50000,'Force of nature','Reach 50,000 fight power',6,6,138)
 on conflict (id) do update set stat=excluded.stat,at=excluded.at,name=excluded.name,what=excluded.what,tier=excluded.tier,tiers=excluded.tiers,sort=excluded.sort;
 
 -- Story missions: 8 stories, 40 missions.
