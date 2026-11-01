@@ -184,7 +184,7 @@ export function Company({ arg }) {
 
 // ---------------- Crew war room ----------------
 const HINT = { "much weaker": "good", weaker: "good", even: "warn", stronger: "bad", "much stronger": "bad" };
-const STATUS = { ok: "Out and about", jail: "In the cells", hosp: "In A&E", travel: "In a taxi" };
+const STATUS = { ok: "Out and about", jail: "In the cells", hosp: "In A&E", travel: "In a taxi", road: "On the road", away: "Out of town" };
 export function WarRoom() {
   const { me, state, run, busy, toast, showSheet } = useGame(); const startFight = useStartFight();
   const [d, setD] = useState(null); const [confirm, setConfirm] = useState(null); const [surrender, setSurrender] = useState(false);

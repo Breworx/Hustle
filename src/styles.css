@@ -531,3 +531,30 @@ a.btn{text-decoration:none}
 .fightlog p{margin:0 0 3px;font-family:var(--story);font-size:15.5px;line-height:1.45}
 .fightlog p.theirs{color:var(--mist)}
 @media (max-width:560px){.fighters{grid-template-columns:1fr}.fighters .vs{display:none}.slots{grid-template-columns:1fr 1fr}.moves{grid-template-columns:1fr}}
+
+/* ---- Travelling the country ---- */
+.travelgrid{display:grid;grid-template-columns:minmax(260px,380px) minmax(0,1fr);gap:16px;align-items:start}
+.mappanel{position:sticky;top:16px}
+.nzmap{width:100%;height:auto;display:block;max-height:70vh}
+.nzmap .land{fill:var(--deck-3);stroke:var(--rope-2);stroke-width:1.2;stroke-linejoin:round}
+.nzmap .route{stroke:var(--sodium);stroke-width:2;stroke-dasharray:5 4}
+.nzmap .pin{cursor:pointer;outline:none}
+.nzmap .pin circle{fill:var(--mist-2);stroke:var(--deck);stroke-width:2}
+.nzmap .pin text{font:600 11px var(--ui);fill:var(--mist);paint-order:stroke;stroke:var(--deck);stroke-width:3px}
+.nzmap .pin.here circle{fill:var(--seaglass)}
+.nzmap .pin.here text{fill:var(--fog)}
+.nzmap .pin.sel circle{fill:var(--sodium);r:8}
+.nzmap .pin.sel text{fill:var(--sodium);font-weight:750}
+.nzmap .pin.locked{opacity:.45}
+.nzmap .pin:focus-visible circle{stroke:var(--sodium);stroke-width:3}
+.thumb.modeic{color:var(--sodium)}
+.thumb.modeic svg{width:22px;height:22px}
+.li.on{background:var(--sodium-soft)}
+.li .bad{color:var(--brick)}
+.shopact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.onroad>.body{display:flex;gap:14px;align-items:center}
+.track.roadbar{position:relative;height:6px;border-radius:3px;background:var(--deck-3);overflow:visible;margin:10px 0 6px}
+.track.roadbar .fill{background:var(--sodium);border-radius:3px}
+.track.roadbar i{position:absolute;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--deck);border:2px solid var(--sodium);display:grid;place-items:center;color:var(--sodium);transition:left 1s linear}
+.track.roadbar i svg{width:14px;height:14px}
+@media (max-width:820px){.travelgrid{grid-template-columns:1fr}.mappanel{position:static}.nzmap{max-height:52vh}}

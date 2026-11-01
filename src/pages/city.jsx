@@ -12,7 +12,7 @@ import { bustStory, pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
 import { useStartFight } from "./armoury.jsx";
 
-const STATUS = { ok: ["Out and about", "good"], jail: ["In the cells", "warn"], hosp: ["In A&E", "bad"], travel: ["In a taxi", ""] };
+const STATUS = { ok: ["Out and about", "good"], jail: ["In the cells", "warn"], hosp: ["In A&E", "bad"], travel: ["In a taxi", ""], road: ["On the road", ""], away: ["Out of town", ""] };
 const hasBlock = (holdings, t) => (holdings[t]?.shares || 0) >= (STOCKS.find(s => s.t === t)?.shares || 1e12);
 const nameBtn = { background: "none", border: 0, padding: 0, font: "inherit", fontWeight: 650, color: "inherit", textAlign: "left" };
 

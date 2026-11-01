@@ -20,13 +20,14 @@ import { Admin } from "./pages/admin.jsx";
 import { Garage, Career, Medals, Missions, Event } from "./pages/life.jsx";
 import { Companies, Company, WarRoom } from "./pages/business.jsx";
 import { Armoury, Fight } from "./pages/armoury.jsx";
+import { Travel, MODE_ICON } from "./pages/travel.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
   { group: "Your life", items: [["home", "Home", Ic.Building], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["companies", "Companies", Ic.Factory], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
   { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
   { group: "People", items: [["crews", "Crews", Ic.Flag], ["war", "War room", Ic.Siren], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
-  { group: "The city", items: [["map", "Map and turf", Ic.Map], ["event", "Events", Ic.PartyPopper], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
+  { group: "The city", items: [["map", "Map and turf", Ic.Map], ["travel", "Travel the country", Ic.Plane], ["event", "Events", Ic.PartyPopper], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
 ];
 const TABS = [["street", "Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["market", "Market", Ic.Store]];
 
@@ -160,7 +161,7 @@ function Banned({ b }) {
   );
 }
 
-const PAGES = { armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
@@ -239,7 +240,7 @@ function Topbar({ onMenu }) {
           <Avatar seed={me.id} look={me.look} />
           <span><b><Name p={{ ...me, crew_tag: state.crew?.tag }} /></b><span className="sub">{rankOf(me.level)}, level {me.level}</span></span>
         </button>
-        <div className="purse"><b>{money(me.cash)}</b><span>{DISTRICT_NAMES[me.district]}</span></div>
+        <div className="purse"><b>{money(me.cash)}</b><span>{me.city && me.city !== "home" ? (me.status === "road" ? `To ${me.trip?.to_name}` : me.trip?.to_name) : DISTRICT_NAMES[me.district]}</span></div>
         <div className="meters">
           <Meter label="Stamina" value={me.stamina} max={me.max_stamina} color="var(--stamina)" />
           <Meter label="Grit" value={me.grit} max={me.max_grit} color="var(--grit)" />
@@ -263,6 +264,8 @@ function StatusBanner() {
   }
   if (me.status === "hosp") return <div className="banner hosp"><Ic.HeartPulse /><span className="grow"><b>In A&amp;E</b> for <Countdown until={me.hosp_until} onDone={refresh} />. {me.hosp_reason}</span>
     {inv.med > 0 && <button className="btn sm" onClick={() => run("use_item", { p_item: "med" })}>Use a first-aid kit ({inv.med})</button>}</div>;
+  if (me.status === "road") { const I = MODE_ICON[me.trip?.mode] || Ic.Car; return <div className="banner travel"><I /><span className="grow"><b>On the road</b> to {me.trip?.to_name} by {(me.trip?.name || "").toLowerCase()}, arriving in <Countdown until={me.trip_until} onDone={refresh} />.</span><button className="btn sm ghost" onClick={() => go("travel")}>Trip</button></div>; }
+  if (me.status === "away") return <div className="banner travel"><Ic.MapPin /><span className="grow"><b>In {me.trip?.to_name}.</b> Jobs, the gym and fights are back home. Shop the local goods, then head back.</span><button className="btn sm" onClick={() => go("travel")}>Shop and travel</button></div>;
   if (me.status === "travel") return <div className="banner travel"><Ic.Car /><span className="grow"><b>In a taxi</b> to {DISTRICT_NAMES[me.travel_to]}, arriving in <Countdown until={me.travel_until} onDone={refresh} />.</span></div>;
   return null;
 }

@@ -95,7 +95,7 @@ function CrewView({ id }) {
         <div className="list">{c.members.map(m => (
           <div key={m.id} className="li"><Avatar seed={m.id} look={m.look} />
             <div><button style={linkBtn} onClick={() => go("player/" + m.id)}><Name p={m} tag={false} /></button>
-              <div className="s">{ROLE[m.role]}, level {m.level}. {m.status === "ok" ? `Last seen ${ago(m.last_seen)}` : m.status === "jail" ? "In the cells" : m.status === "hosp" ? "In A&E" : "In a taxi"}.</div></div>
+              <div className="s">{ROLE[m.role]}, level {m.level}. {m.status === "ok" ? `Last seen ${ago(m.last_seen)}` : m.status === "jail" ? "In the cells" : m.status === "hosp" ? "In A&E" : m.status === "away" ? "Out of town" : m.status === "road" ? "On the road" : "In a taxi"}.</div></div>
             <div className="act">{m.id !== me.id && lead && <>
                 {m.role === "member" && <button className="btn ghost sm" disabled={busy} onClick={() => act("crew_member", { p_player: m.id, p_action: "officer" })}>Make officer</button>}
                 {m.role === "officer" && <button className="btn ghost sm" disabled={busy} onClick={() => act("crew_member", { p_player: m.id, p_action: "member" })}>Demote</button>}

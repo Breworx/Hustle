@@ -1,5 +1,6 @@
 import {SEASONS,TROPHIES} from "./seasons.js";
 import {SHOP_ARMS,AMMO,ARMS_SHAPES} from "./arms.js";
+import {CITY_ITEMS,TRAVEL_SHAPES} from "./travel.js";
 // Shared game content: item art, the 1,000-item catalogue and portraits.
 // Used by the web app for display and by scripts/gen-sql.mjs to seed the database.
 const I={
@@ -347,9 +348,10 @@ const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx
    sh:a.sh,c:a.c,c2:"",fx:a.def!=null?Math.round(a.def*0.8):Math.round((a.dmg||0)*(a.shots||1)*0.8),unlimited:true,d:a.d})),
  ...AMMO.map(a=>({id:a.id,n:a.n,cat:"use",r:0,v:Math.round(a.price/a.box*0.6*10)/10,sh:a.sh,c:a.c,c2:"",unlimited:true,d:a.d})),
  {id:"war_trophy",n:"Crew war trophy",cat:"collect",r:3,v:50000,sh:"statue",c:"#e8664f",c2:"",unlimited:true,d:"Handed to everyone on the winning side of a crew war who landed a blow. The engraving lists the other crew's name, misspelled."},
+ ...CITY_ITEMS.map(it=>({...it,unlimited:true,fx:it.arms?(it.arms.def!=null?Math.round(it.arms.def*0.8):Math.round(it.arms.dmg*(it.arms.shots||1)*0.8)):undefined})),
  ...SEASONS.flatMap(se=>se.items.map(it=>({cat:"collect",c2:"",fx:undefined,...it,season:se.id}))),
  ...TROPHIES.map(it=>({cat:"collect",c2:"",fx:undefined,...it}))];
-Object.assign(SHP,ARMS_SHAPES);
+Object.assign(SHP,ARMS_SHAPES,TRAVEL_SHAPES);
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];
 const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box"]],["junk","Junk",["junk"]]];
