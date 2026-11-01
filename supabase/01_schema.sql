@@ -40,6 +40,9 @@ create table if not exists game.players(
 );
 create unique index if not exists players_name_ci on game.players (lower(name));
 alter table game.players add column if not exists founder int unique;
+-- Tokens: "Regular" status (faster regen) and the once-a-day refills you can buy with them.
+alter table game.players add column if not exists regular_until timestamptz;
+alter table game.players add column if not exists refill_at jsonb not null default '{}'::jsonb;
 create index if not exists players_seen on game.players (last_seen desc);
 
 create table if not exists game.items(
@@ -199,8 +202,9 @@ begin
   if not found then raise exception 'NO_PLAYER'; end if;
   m := extract(epoch from (t - p.bars_at)) / 60.0;
   if m > 0 then
-    if p.stamina < p.max_stamina then p.stamina := least(p.max_stamina, p.stamina + m * 5 / 3.0); end if;
-    if p.grit < p.max_grit then p.grit := least(p.max_grit, p.grit + m * 0.5); end if;
+    -- Regulars (bought with tokens) get stamina and grit back 25% faster.
+    if p.stamina < p.max_stamina then p.stamina := least(p.max_stamina, p.stamina + m * 5 / 3.0 * case when p.regular_until > t then 1.25 else 1 end); end if;
+    if p.grit < p.max_grit then p.grit := least(p.max_grit, p.grit + m * 0.5 * case when p.regular_until > t then 1.25 else 1 end); end if;
     if p.mood < p.max_mood then p.mood := least(p.max_mood, p.mood + m * 2); end if;
     if p.health < p.max_health then p.health := least(p.max_health, p.health + m * 5 / 3.0); end if;
     p.heat := greatest(0, p.heat - m * case when game.has_block(p.id, 'UPVT') then 1.25 else 1 end);
@@ -275,7 +279,7 @@ begin
     tries := tries + 1; r := random(); pick := null;
     with wt as (select id, power(1 + boost, rarity) * coalesce(supply - minted, (array[6000,1200,200,30,5])[rarity + 1]) as w
                 from game.items
-                where (not use_cats or cat = any(cats)) and id <> 'founder' and (supply is null or minted < supply)),
+                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token') and (supply is null or minted < supply)),
          cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
     select id into pick from cum where cw >= r * tw order by cw limit 1;
     if pick is not null then
@@ -308,7 +312,7 @@ $$;
 create or replace function game.card(p game.players) returns jsonb language sql stable as $$
   select jsonb_build_object('id', p.id, 'name', p.name, 'level', p.level, 'district', p.district,
     'status', game.status(p), 'last_seen', p.last_seen, 'wins', p.wins, 'losses', p.losses,
-    'created_at', p.created_at, 'founder', p.founder,
+    'created_at', p.created_at, 'founder', p.founder, 'regular', coalesce(p.regular_until > now(), false),
     'protected', (p.level < 3 or p.created_at > now() - interval '1 day')) $$;
 
 -- =====================================================================
@@ -690,6 +694,7 @@ begin
   p := game.me();
   select * into it from game.items where id = p_item;
   if not found then raise exception 'Unknown item.'; end if;
+  if it.id = 'token' then raise exception 'The pawn shop won''t touch tokens. Sell them on the market instead.'; end if;
   perform game.take(p.id, it.id, q);
   pay := floor(it.value * q * (0.5 + least(0.1, (game.skill_lvl(p.skills, 'trade') - 1) * 0.003)));
   update game.players set cash = cash + pay where id = p.id;
@@ -912,13 +917,111 @@ begin
     limit 50) x), '[]');
 end $$;
 
+
+-- =====================================================================
+-- TOKENS: the premium currency.
+-- Tokens are an ordinary stash item ("token"), so they can be traded on the player market for game cash like
+-- anything else. That way players who never pay can still earn them. They come into the game in one way only:
+-- a real payment confirmed by Stripe, credited by public.credit_purchase(), which only the server can call.
+-- =====================================================================
+create table if not exists game.token_packs(id text primary key, tokens int not null, price_cents int not null, currency text not null default 'nzd', name text not null, sort int not null default 0);
+insert into game.token_packs(id, tokens, price_cents, name, sort) values
+  ('handful', 30, 499, 'A handful', 1), ('stack', 100, 1499, 'A stack', 2), ('pile', 220, 2999, 'A pile (10% extra)', 3), ('vault', 600, 7499, 'The vault (25% extra)', 4)
+on conflict (id) do update set tokens = excluded.tokens, price_cents = excluded.price_cents, name = excluded.name, sort = excluded.sort;
+
+create table if not exists game.purchases(
+  id bigint generated always as identity primary key,
+  stripe_session text not null unique,
+  player_id uuid references game.players(id) on delete set null,
+  pack text not null, tokens int not null, amount_cents int not null, currency text not null,
+  created_at timestamptz not null default now());
+alter table game.token_packs enable row level security;
+alter table game.purchases enable row level security;
+revoke all on game.token_packs, game.purchases from public;
+
+-- What tokens buy. Kept in one place so the page and the server agree.
+create or replace function game.token_menu() returns jsonb language sql immutable as $$
+  select '[
+    {"id":"stamina","cost":10,"name":"Refill stamina","desc":"Fill your stamina to the top. Once a day."},
+    {"id":"grit","cost":10,"name":"Refill grit","desc":"Fill your grit to the top. Once a day."},
+    {"id":"heat","cost":5,"name":"Call a lawyer","desc":"Wipe your heat back to zero. Once a day."},
+    {"id":"regular","cost":150,"name":"Regular for 30 days","desc":"Stamina and grit come back 25% faster, and you get a Regular badge. Stacks if you buy it again."}
+  ]'::jsonb $$;
+
+create or replace function public.token_info() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object(
+    'packs', (select jsonb_agg(jsonb_build_object('id', id, 'tokens', tokens, 'price_cents', price_cents, 'currency', currency, 'name', name) order by sort) from game.token_packs),
+    'menu', game.token_menu(), 'refill_at', p.refill_at, 'regular_until', p.regular_until,
+    'bought', coalesce((select jsonb_agg(jsonb_build_object('tokens', tokens, 'amount_cents', amount_cents, 'currency', currency, 'at', created_at) order by created_at desc)
+                        from (select * from game.purchases where player_id = p.id order by created_at desc limit 10) x), '[]'));
+end $$;
+
+create or replace function public.token_spend(p_what text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; opt jsonb; cost int; last timestamptz;
+begin
+  p := game.me();
+  select x into opt from jsonb_array_elements(game.token_menu()) x where x->>'id' = p_what;
+  if opt is null then raise exception 'Unknown option.'; end if;
+  cost := (opt->>'cost')::int;
+  if p_what <> 'regular' then
+    last := (p.refill_at->>p_what)::timestamptz;
+    if last is not null and last > now() - interval '1 day' then raise exception 'You''ve already used that today.'; end if;
+    if p_what = 'stamina' and p.stamina >= p.max_stamina then raise exception 'Your stamina is already full.'; end if;
+    if p_what = 'grit' and p.grit >= p.max_grit then raise exception 'Your grit is already full.'; end if;
+    if p_what = 'heat' and p.heat < 1 then raise exception 'You''ve got no heat to clear.'; end if;
+  end if;
+  if not exists (select 1 from game.inventory where player_id = p.id and item_id = 'token' and qty >= cost) then
+    raise exception 'That costs % tokens.', cost; end if;
+  perform game.take(p.id, 'token', cost);
+  case p_what
+    when 'stamina' then update game.players set stamina = max_stamina where id = p.id;
+    when 'grit' then update game.players set grit = max_grit where id = p.id;
+    when 'heat' then update game.players set heat = 0 where id = p.id;
+    when 'regular' then update game.players set regular_until = greatest(coalesce(regular_until, now()), now()) + interval '30 days' where id = p.id;
+  end case;
+  if p_what <> 'regular' then
+    update game.players set refill_at = refill_at || jsonb_build_object(p_what, now()) where id = p.id;
+  end if;
+  return jsonb_build_object('spent', cost, 'what', p_what);
+end $$;
+
+-- Called only by the Stripe webhook (with the service key) once Stripe confirms a payment.
+-- The session id is unique, so a webhook that arrives twice can never credit twice.
+create or replace function public.credit_purchase(p_session text, p_player uuid, p_pack text, p_amount int, p_currency text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare k game.token_packs; new_id bigint;
+begin
+  select * into k from game.token_packs where id = p_pack;
+  if not found then raise exception 'Unknown pack %', p_pack; end if;
+  if not exists (select 1 from game.players where id = p_player) then raise exception 'Unknown player %', p_player; end if;
+  if p_amount < k.price_cents or lower(p_currency) <> k.currency then raise exception 'Paid % % for pack % (expected % %)', p_amount, p_currency, k.id, k.price_cents, k.currency; end if;
+  insert into game.purchases(stripe_session, player_id, pack, tokens, amount_cents, currency)
+    values (p_session, p_player, k.id, k.tokens, p_amount, lower(p_currency))
+    on conflict (stripe_session) do nothing returning id into new_id;
+  if new_id is null then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+  perform game.give(p_player, 'token', k.tokens);
+  update game.items set minted = minted + k.tokens where id = 'token';
+  perform game.notify(p_player, 'tokens', format('Payment received. %s tokens are in your stash. Thank you for supporting Backstreet.', k.tokens));
+  return jsonb_build_object('ok', true, 'tokens', k.tokens);
+end $$;
+revoke all on function public.credit_purchase(text, uuid, text, int, text) from public;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then revoke all on function public.credit_purchase(text, uuid, text, int, text) from anon, authenticated; end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.credit_purchase(text, uuid, text, int, text) to service_role; end if;
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in ('create_player','get_state','get_events','do_job','train','fight_npc','attack',
              'list_players','get_profile','jail_list','hosp_list','bust','bail','travel','use_item','shop_buy','pawn','market_list',
              'market_cancel','market_buy','market_overview','market_item','my_listings','stock_board','stock_trade','stock_perk',
-             'bank','chat_send','chat_recent','leaderboard','item_supply') loop
+             'bank','chat_send','chat_recent','leaderboard','item_supply','token_info','token_spend') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

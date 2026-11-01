@@ -338,6 +338,8 @@ function genItems(){
 }
 const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx})),...genItems(),
  // Never drops. Handed to the first 100 people who create a character, numbered in the order they arrived.
+ // Bought with real money (or from other players on the market). Spent on refills and Regular status.
+ {id:"token",n:"Token",cat:"use",r:2,v:1500,sh:"coin",c:"#f2c14e",c2:"",d:"Backstreet's premium currency. Spend tokens on refills and Regular status, or sell them to other players for cash."},
  {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Backstreet. There will never be another."}];
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];

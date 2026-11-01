@@ -73,7 +73,8 @@ function ItemSheet({ id, onClose }) {
         <p className="story">{it.d}{it.fx ? ` Adds ${it.fx}% to your fight power when equipped.` : ""}</p>
         {mkt?.supply && <SupplyNote m={mkt} />}
         <div className="stack" style={{ padding: "8px 20px 20px" }}>
-          {(canUse(id) || canEquip(id)) && <button className="btn" disabled={busy} onClick={use}>{canEquip(id) ? (eq ? "Unequip" : "Equip") : it.cat === "box" ? "Open it" : id === "oldmap" ? "Go digging" : id === "msgbottle" ? "Open the bottle" : "Use it"}</button>}
+          {id === "token" && <button className="btn" onClick={() => { onClose(); go("tokens"); }}>Spend tokens</button>}
+          {id !== "token" && (canUse(id) || canEquip(id)) && <button className="btn" disabled={busy} onClick={use}>{canEquip(id) ? (eq ? "Unequip" : "Equip") : it.cat === "box" ? "Open it" : id === "oldmap" ? "Go digging" : id === "msgbottle" ? "Open the bottle" : "Use it"}</button>}
           <div className="panel" style={{ boxShadow: "none" }}><div className="body stack-sm">
             <b>Sell on the market</b>
             <div className="tiny">{mkt ? (low ? `Cheapest listing now: ${money(low)}.` : "Nobody's selling one right now. Name your price.") : "Checking the market…"} Buyers pay a 3% fee on top.</div>

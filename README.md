@@ -9,6 +9,7 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 - **Every rule runs on the server.** Game tables live in a private `game` schema the public API can't touch. The browser can only call the `public.*` functions in `supabase/01_schema.sql`, and each one checks who's calling before doing anything. Nobody can give themselves cash from the browser console.
 - **Live updates.** Chat messages and notifications (you were attacked, your item sold) arrive instantly through Supabase Realtime, with polling as a fallback.
 - **Limited items.** Every collectible has a fixed number of copies that will ever exist, from a few thousand for common junk down to a single copy for the rarest. Each drop is like pulling one copy out of a bag holding every copy left, so scarce items are very hard to find and get harder as they're found. Once all copies are out, the only way to get one is from another player. Food, consumables and mystery boxes never run out. The first 100 characters each get a numbered Founder's key.
+- **Tokens.** The premium currency. Players buy them through Stripe, or buy and sell them with each other on the market for game cash, so nobody has to pay to get them. They're spent on once-a-day refills and 30-day Regular status (faster regen). Limited items and mystery boxes are never sold for real money. Tokens only enter the game when Stripe confirms a payment, and each payment can only be counted once.
 - **Real stock moves.** `supabase/03_stock_feed.sql` fetches each real company's close after the US market shuts and moves its game twin by the same percentage.
 
 ## Set it up (about 15 minutes, all doable on an iPad)
@@ -37,6 +38,29 @@ Then go to **Authentication → URL Configuration** and set **Site URL** to your
    - `VITE_SUPABASE_URL`: the Project URL
    - `VITE_SUPABASE_ANON_KEY`: the `anon` `public` key (never the `service_role` key)
 3. Tap **Deploy**. When it's done, open the address, create an account and pick a street name.
+
+### 4. Switch on payments (when you're ready to take money)
+
+The game runs fine without this. The Buy buttons just say payments aren't switched on yet.
+
+1. **Fill in the terms page.** Open `src/pages/legal.jsx` and replace the two values at the top with your name or business and a contact email. It's a plain-English draft, so have it checked before you take real money.
+2. **Stripe account.** Sign up at stripe.com and fill in your business details and bank account. Do everything below in **test mode** first (the toggle at the top of the Stripe dashboard).
+3. **Copy your secret key.** In Stripe, go to **Developers → API keys** and copy the **Secret key** (starts `sk_test_`).
+4. **Create the two functions in Supabase.** Go to **Edge Functions → Deploy a new function → Via editor**.
+   - Name the first one `create-checkout`. Paste in `supabase/functions/create-checkout/index.ts` and deploy.
+   - Name the second one `stripe-webhook`. Paste in `supabase/functions/stripe-webhook/index.ts`. Before deploying, switch **Verify JWT** off: Stripe can't sign in, and the function checks Stripe's own signature instead.
+5. **Tell Stripe where to send payments.** In Stripe, go to **Developers → Webhooks → Add endpoint**.
+   - URL: `https://<your-project>.supabase.co/functions/v1/stripe-webhook`
+   - Events: `checkout.session.completed` and `checkout.session.async_payment_succeeded`.
+   - Save, then copy the **Signing secret** (starts `whsec_`).
+6. **Add the secrets in Supabase.** Go to **Edge Functions → Secrets** and add three:
+   - `STRIPE_SECRET_KEY`: the key from step 3
+   - `STRIPE_WEBHOOK_SECRET`: the signing secret from step 5
+   - `SITE_URL`: your Vercel address, like `https://backstreet.vercel.app`
+7. **Test a purchase.** Buy a pack in the game using Stripe's test card `4242 4242 4242 4242`, any future expiry date and any CVC. The tokens should land in your stash within a few seconds.
+8. **Go live.** Switch Stripe to live mode. Repeat steps 3, 5 and 6 with the live keys.
+
+Pack prices are in NZD and include GST. They're set in the `token_packs` table in `01_schema.sql`. Once you're registered for GST, or selling to a lot of overseas players, look at **Stripe Tax** to handle tax for you. If a player asks for a refund, refund the payment in the Stripe dashboard and remove their unspent tokens.
 
 ## Changing the game
 

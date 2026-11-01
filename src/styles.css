@@ -318,3 +318,6 @@ label.field{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(
 :root[data-theme="light"] .pill.scarce{color:#9a5a06}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .pill.scarce{color:#9a5a06}}
 @media (max-width:1240px) and (min-width:961px){.meter .mh b .muted{display:none}}
+.legal p{max-width:68ch;color:var(--fog)}
+.legal{padding:24px 0 60px}
+a.btn{text-decoration:none}

@@ -11,23 +11,28 @@ import { Street } from "./pages/street.jsx";
 import { Jobs, Gym, Fights } from "./pages/work.jsx";
 import { Stash, Market, Store, Bank } from "./pages/money.jsx";
 import { Exchange } from "./pages/exchange.jsx";
+import { Tokens } from "./pages/tokens.jsx";
+import { Legal } from "./pages/legal.jsx";
 import { CityMap, Players, Profile, Cells, AandE, Chat, Rankings, News, Account } from "./pages/city.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["gym", "Gym", Ic.Dumbbell]] },
-  { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark]] },
+  { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
   { group: "The city", items: [["map", "Map", Ic.Map], ["players", "Players", Ic.Users], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse], ["chat", "Chat", Ic.MessageSquare], ["ranks", "Rankings", Ic.Trophy]] }
 ];
 const TABS = [["street", "Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["market", "Market", Ic.Store]];
 
 export default function App() {
   const [session, setSession] = useState(undefined);
+  const route = useRoute();
   useEffect(() => {
     if (!configured) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s || null));
     return () => data.subscription.unsubscribe();
   }, []);
+  // The terms page is public, so Stripe and new players can read it without signing in.
+  if (route.startsWith("legal")) return <Legal />;
   if (!configured) return <SetupNeeded />;
   if (session === undefined) return <Loading />;
   if (!session) return <Auth />;
@@ -70,6 +75,7 @@ function Auth() {
         <label className="field">Password<input className="input" type="password" autoComplete={mode === "in" ? "current-password" : "new-password"} minLength={6} required value={pw} onChange={e => setPw(e.target.value)} /></label>
         {err && <p className="err">{err}</p>}
         {note && <p className="good">{note}</p>}
+        <p className="tiny">By playing you agree to the <a href="#/legal">terms and privacy policy</a>.</p>
         <button className="btn lg block" disabled={busy}>{busy ? "One moment…" : mode === "in" ? "Sign in" : "Create account"}</button>
         <p className="muted small">{mode === "in" ? "New to the city? " : "Already have an account? "}
           <button type="button" className="btn ghost sm" onClick={() => { setMode(mode === "in" ? "up" : "in"); setErr(""); }}>{mode === "in" ? "Create an account" : "Sign in instead"}</button></p>
@@ -106,13 +112,13 @@ function Gate() {
   return <Shell />;
 }
 
-const PAGES = { street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
-  const { me, state } = useGame();
+  const { me, state, inv } = useGame();
   const route = useRoute();
-  const [base, ...rest] = route.split("/");
+  const [base, ...rest] = route.split("?")[0].split("/");
   const Page = PAGES[base] || Street;
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [route]);
@@ -129,7 +135,7 @@ function Shell() {
             <h4>{g.group}</h4>
             {g.items.map(([k, label, Icon]) => (
               <button key={k} className="navlink" aria-current={base === k ? "page" : undefined} onClick={() => go(k)}>
-                <Icon />{label}{badge(k, me)}
+                <Icon />{label}{badge(k, me, inv)}
               </button>
             ))}
           </div>
@@ -153,7 +159,8 @@ function Shell() {
   );
 }
 
-function badge(k, me) {
+function badge(k, me, inv) {
+  if (k === "tokens" && inv.token) return <span className="count quiet">{inv.token}</span>;
   if (k === "cells" && me.status === "jail") return <span className="count">You</span>;
   if (k === "ae" && me.status === "hosp") return <span className="count">You</span>;
   return null;
