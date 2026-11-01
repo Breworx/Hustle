@@ -3,8 +3,9 @@
 // some only found there. Buy cheap, carry it home, sell it on the market or keep it.
 // Edit, then `npm run gen-sql`.
 
-// Real minutes per hour of travel in the game world. A 640 km bus ride (9 hours) takes about 46 minutes.
-export const MINUTES_PER_HOUR = 5;
+// Real minutes per hour of travel in the game world. At 20, a 340 km coach ride (about 5 hours) takes an hour and a half,
+// and a long-haul flight to the other side of the world takes most of a day. Change it, then `npm run gen-sql`.
+export const MINUTES_PER_HOUR = 20;
 // The city everyone plays in. On your travel map it sits inside your own country.
 export const HOME_NAME = "Greyhaven";
 // Chance customs find contraband when you cross a border, by how you travel.
@@ -75,7 +76,7 @@ export const GEAR = [
 
 // What each city sells. price is the local shop price; v is what it's worth back home.
 // Stock is shared by every player and comes back slowly: rarer things come back much slower.
-const S = (city, id, n, cat, r, v, price, sh, c, d, extra = {}) => ({ id: `c_${city}_${id}`, city, n, cat, r, v, price, sh, c, c2: "", d, ...extra });
+const S = (city, id, n, cat, r, v, price, sh, c, d, extra = {}) => ({ id: `c_${city}_${id}`, city, n, cat, r, v, price: Math.max(1, Math.round(price * 0.75)), sh, c, c2: "", d, ...extra });
 const food = (u) => ({ u });
 const melee = (dmg, acc, weight, lvl) => ({ arms: { slot: "melee", dmg, acc, weight, lvl } });
 const armour = (slot, def, weight, lvl = 1) => ({ arms: { slot, def, weight, lvl } });

@@ -88,7 +88,7 @@ for (const [id, name, iso] of TOWNS) {
   const food = z.food[h % z.food.length], craft = z.craft[(h >>> 5) % z.craft.length], souv = SOUVENIR[(h >>> 9) % SOUVENIR.length];
   for (const [k, t, cat, d] of [["f", food, "food", `A local favourite in ${name}.`], ["s", souv, "collect", `Every tourist in ${name} goes home with one.`], ["c", craft, "collect", `Made in ${name}, ${cn}.`]]) {
     const v = vary(t.v, h >>> (k === "f" ? 1 : k === "s" ? 2 : 3));
-    WORLD_ITEMS.push({ id: `w_${id}_${k}`, city: id, n: fill(t.n, name, cn), cat: k === "f" && !t.u ? "use" : cat, r: rarityOf(v), v, price: Math.max(1, Math.round(v * 0.42)), sh: t.sh, c: t.c, c2: "", d, u: t.u });
+    WORLD_ITEMS.push({ id: `w_${id}_${k}`, city: id, n: fill(t.n, name, cn), cat: k === "f" && !t.u ? "use" : cat, r: rarityOf(v), v, price: Math.max(1, Math.round(v * 0.3)), sh: t.sh, c: t.c, c2: "", d, u: t.u });
   }
 }
 const firstTown = Object.fromEntries([...TOWNS].reverse().map(t => [t[2], t]));
@@ -97,10 +97,10 @@ for (const [iso, name, zone, , , , hub] of COUNTRIES) {
   const z = ZONES[zone] || ZONES.oce, h = hash(iso), hubTown = TOWNS.find(t => t[0] === hub) || firstTown[iso];
   if (!hubTown) continue;
   const rare = z.rare[h % z.rare.length], gear = GEAR[(h >>> 4) % GEAR.length];
-  WORLD_ITEMS.push({ id: `w_${iso.toLowerCase()}_r`, city: hubTown[0], n: fill(rare.n, hubTown[1], name), cat: "collect", r: 3, v: vary(rare.v, h), price: Math.round(vary(rare.v, h) * 0.42), sh: rare.sh, c: rare.c, c2: "",
+  WORLD_ITEMS.push({ id: `w_${iso.toLowerCase()}_r`, city: hubTown[0], n: fill(rare.n, hubTown[1], name), cat: "collect", r: 3, v: vary(rare.v, h), price: Math.round(vary(rare.v, h) * 0.3), sh: rare.sh, c: rare.c, c2: "",
     d: `Found in ${theName(name)}. There's only ever one in the shop, and it takes a long time to come back.` });
   const gid = `w_${iso.toLowerCase()}_g`, gtown = TOWNS.filter(t => t[2] === iso)[(h >>> 8) % TOWNS.filter(t => t[2] === iso).length] || hubTown;
-  WORLD_ITEMS.push({ id: gid, city: gtown[0], n: fill(gear.n, gtown[1], name), cat: gear.arms.def != null ? "armour" : "weapon", r: 2, v: vary(gear.v, h), price: Math.round(vary(gear.v, h) * 0.42), sh: gear.sh, c: gear.c, c2: "",
+  WORLD_ITEMS.push({ id: gid, city: gtown[0], n: fill(gear.n, gtown[1], name), cat: gear.arms.def != null ? "armour" : "weapon", r: 2, v: vary(gear.v, h), price: Math.round(vary(gear.v, h) * 0.3), sh: gear.sh, c: gear.c, c2: "",
     d: `Picked up in ${gtown[1]}. Works in a fight.`, arms: gear.arms });
 }
 
@@ -124,7 +124,7 @@ for (const [iso, name, , , , , hub] of COUNTRIES) {
   const h = hash("x" + iso), hubTown = TOWNS.find(t => t[0] === hub); if (!hubTown) continue;
   for (const [k, t] of [["x", CONTRA[h % CONTRA.length]], ["y", CONTRA[(h >>> 7) % CONTRA.length === h % CONTRA.length ? ((h >>> 7) + 1) % CONTRA.length : (h >>> 7) % CONTRA.length]]]) {
     const v = vary(t.v, h >>> (k === "x" ? 3 : 11));
-    WORLD_ITEMS.push({ id: `w_${iso.toLowerCase()}_${k}`, city: hubTown[0], n: `${t.n} (${name})`, cat: "contraband", r: 2, v, price: Math.max(1, Math.round(v * 0.28)), sh: t.sh, c: t.c, c2: "",
+    WORLD_ITEMS.push({ id: `w_${iso.toLowerCase()}_${k}`, city: hubTown[0], n: `${t.n} (${name})`, cat: "contraband", r: 2, v, price: Math.max(1, Math.round(v * 0.2)), sh: t.sh, c: t.c, c2: "",
       d: `Sold quietly in a back alley in ${hubTown[1]}. Worth a lot more at home, if customs don't find it.`, u: t.u, contraband: true });
   }
 }

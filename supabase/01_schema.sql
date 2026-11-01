@@ -3081,6 +3081,9 @@ end $$;
 -- =====================================================================
 -- TRAVELLING THE COUNTRY, AND THE WORLD
 -- =====================================================================
+-- Real minutes per hour on the road (02_content.sql sets it from MINUTES_PER_HOUR in src/game/travel.js).
+create or replace function game.travel_scale() returns numeric language sql immutable as $$ select 20::numeric $$;
+
 -- Straight-line distance between two places in km.
 create or replace function game.km(a game.cities, b game.cities) returns numeric language sql immutable as $$
   select round((2 * 6371 * asin(least(1, sqrt(power(sin(radians(b.lat - a.lat) / 2), 2)
@@ -3149,7 +3152,7 @@ begin
   elsif p.bag > cap then why := format('You''re carrying %s things. This only fits %s.', p.bag, cap);
   elsif p.cash < cost then why := 'You can''t afford it.';
   end if;
-  return jsonb_build_object('mode', m.id, 'name', nm, 'ok', why is null, 'why', why, 'minutes', greatest(1, round(hrs * 5)), 'cost', cost, 'cap', cap,
+  return jsonb_build_object('mode', m.id, 'name', nm, 'ok', why is null, 'why', why, 'minutes', greatest(1, round(hrs * game.travel_scale())), 'cost', cost, 'cap', cap,
     'ferry', strait and road, 'km', round(dist), 'blurb', coalesce(case when (m.spec->>'own')::boolean then v.blurb end, s->>'blurb'), 'intl', intl, 'customs', customs,
     'risk', case when m.id in ('stow', 'cargo') then case when m.id = 'stow' and 'manifest' = any(g) then 5 when m.id = 'cargo' then 20 else 20 end when m.id = 'hitch' then -1 end);
 end $$;

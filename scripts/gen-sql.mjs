@@ -9,7 +9,7 @@ import {MISSIONS} from "../src/game/missions.js";
 import {SEASONS} from "../src/game/seasons.js";
 import {COMPANIES,COMPANY_STARS} from "../src/game/companies.js";
 import {SHOP_ARMS,AMMO,lootArms} from "../src/game/arms.js";
-import {CITIES,MODES,VEHICLE_TRAVEL,GEAR,CITY_ITEMS,RESTOCK} from "../src/game/travel.js";
+import {CITIES,MODES,VEHICLE_TRAVEL,GEAR,CITY_ITEMS,RESTOCK,MINUTES_PER_HOUR} from "../src/game/travel.js";
 import {COUNTRIES,TOWNS} from "../src/game/world-data.js";
 import {WORLD_ITEMS,theName} from "../src/game/worldgoods.js";
 const q=s=>s==null?"null":"'"+String(s).replace(/'/g,"''")+"'";
@@ -106,6 +106,7 @@ out+="insert into game.arms(item_id,slot,dmg,acc,shots,ammo,weight,lvl,price,box
  "\non conflict (item_id) do update set slot=excluded.slot,dmg=excluded.dmg,acc=excluded.acc,shots=excluded.shots,ammo=excluded.ammo,weight=excluded.weight,lvl=excluded.lvl,price=excluded.price,box=excluded.box,effect=excluded.effect,def=excluded.def;\n";}
 
 // Travel: cities, ways to get there, travel gear, vehicles on long trips, and each city's shop.
+out+=`create or replace function game.travel_scale() returns numeric language sql immutable as $$ select ${MINUTES_PER_HOUR}::numeric $$;\n`;
 const NZB=Object.fromEntries(CITIES.map(c=>[c.id,c]));
 const townRow=(t,i)=>{const [id,n,iso,lat,lon,lvl,fl,part]=t;const nz=NZB[id];const cn=COUNTRIES.find(c=>c[0]===iso)?.[1]||iso;
   const blurb=nz?nz.blurb:fl&1?`The capital of ${theName(cn)}.`:fl&2?`A city in ${theName(cn)}, with an airport.`:`A town in ${theName(cn)}.`;
