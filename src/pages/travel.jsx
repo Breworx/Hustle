@@ -5,7 +5,7 @@ import { call } from "../lib/supabase.js";
 import { money, num } from "../lib/format.js";
 import { loadOutline } from "../lib/outline.js";
 import { flag } from "../ui/country.jsx";
-import { TOWNS } from "../game/world-data.js";
+import { TOWNS, COUNTRIES } from "../game/world-data.js";
 import { IT } from "../game/catalog.js";
 import * as Ic from "../ui/icons.js";
 
@@ -13,6 +13,7 @@ export const MODE_ICON = { walk: Ic.Footprints, bikehire: Ic.Bike, hitch: Ic.Thu
   flight: Ic.Plane, charter: Ic.PlaneTakeoff, intl: Ic.Plane, cargo: Ic.Ship, own: Ic.Car };
 export const mins = m => { m = Math.round(m); if (m < 60) return `${m} min`; const h = Math.floor(m / 60), r = m % 60; if (h < 48) return r ? `${h} h ${r} min` : `${h} h`; return `${Math.floor(h / 24)} days ${h % 24} h`; };
 const TOWN = Object.fromEntries(TOWNS.map(t => [t[0], t]));
+const HOMEPOS = Object.fromEntries(COUNTRIES.map(c => [c[0], [c[3], c[4]]]));
 
 // Pins and labels on a country map. Labels that would overlap another are left off (tap the dot to see the name).
 function CountryMap({ outline, cities, sel, onSel, me }) {
@@ -47,35 +48,43 @@ function WorldMap({ world, countries, sel, onSel }) {
   return (
     <svg className="worldmap" viewBox="0 10 720 300" role="group" aria-label="World map">
       <path d={world.d} className="land" />
-      {countries.map(k => { const t = TOWN[k.hub]; if (!t) return null; const x = (t[4] + 180) * 2, y = (90 - t[3]) * 2; return (
+      {countries.map(k => { const t = k.hub === "home" ? [0, 0, 0, ...HOMEPOS[k.iso]] : TOWN[k.hub]; if (!t) return null; const x = (t[4] + 180) * 2, y = (90 - t[3]) * 2; return (
         <circle key={k.iso} cx={x} cy={y} r={sel?.iso === k.iso ? 6 : k.here || k.home ? 4.5 : 2.4} className={`wdot ${k.here ? "here" : ""} ${k.home ? "home" : ""} ${sel?.iso === k.iso ? "sel" : ""}`}
           onClick={() => onSel(k)}><title>{k.name}</title></circle>); })}
     </svg>
   );
 }
 
-function Options({ list, d, onGo }) {
-  const { busy } = useGame();
+const BRIBE_MULT = [1, 0.5, 0.2];
+const odds = (base, tier) => Math.max(1, Math.round(base * BRIBE_MULT[tier]));
+function Options({ list, d, onGo, bribe = 0, setBribe }) {
+  const { busy, me } = useGame();
   if (!list) return <Empty title="Checking the timetables…" />;
   if (!list.length) return <p className="tiny">There's no way to get there from here.</p>;
-  return (
+  const smuggling = d.contraband > 0 && list.some(o => o.intl);
+  return (<>
+    {smuggling && setBribe && <div className="bribe">
+      <div className="stack-sm"><b>You're carrying contraband</b><span className="tiny">Slip some cash to the right person at the border and you're less likely to be searched. You pay it either way, and it's never a sure thing.</span></div>
+      <Seg label="Bribe" value={String(bribe)} onChange={v => setBribe(+v)} options={[["0", "No bribe"], ["1", `Small, ${money(d.bribes[1])}`], ["2", `Big, ${money(d.bribes[2])}`]]} />
+      {bribe > 0 && me.cash < d.bribes[bribe] && <span className="tiny bad">You don't have that much on you.</span>}
+    </div>}
     <div className="list">{list.map(o => { const I = MODE_ICON[o.mode] || Ic.Car; return (
       <div key={o.mode} className={`li ${o.ok ? "" : "locked"}`}>
         <span className="thumb modeic"><I /></span>
         <div><div className="t">{o.name}</div>
           <div className="s">{o.mode === "hitch" ? `About ${mins(o.minutes)}, could be quicker or slower` : mins(o.minutes)}, {o.cost ? money(o.cost) : "free"}{o.ferry ? " with the boat across" : ""}. {num(o.km)} km. Carry {o.cap} things back.</div>
           <div className="tiny">{o.why ? <span className="bad">{o.why}</span> : o.risk > 0 ? `${o.blurb.split(".")[0]}. ${o.risk}% chance you're caught and fined.` : o.blurb}
-            {o.intl && d.contraband > 0 && <span className="bad"> You're carrying contraband: customs search {o.customs}% of travellers this way.</span>}</div></div>
+            {o.intl && d.contraband > 0 && <span className="bad"> Chance customs search you: {odds(o.customs, bribe)}%{bribe ? `, down from ${o.customs}%` : ""}.</span>}</div></div>
         <div className="act"><button className="btn sm" disabled={busy || !o.ok} onClick={() => onGo(o)}>Go</button></div>
       </div>); })}</div>
-  );
+  </>);
 }
 
 export function Travel() {
   const { me, run, toast, showSheet, refresh } = useGame();
   const [d, setD] = useState(null); const [sel, setSel] = useState(null); const [tab, setTab] = useState(me.status === "away" ? "shop" : "go");
   const [outline, setOutline] = useState(null); const [world, setWorld] = useState(null);
-  const [abroad, setAbroad] = useState(null); const [quote, setQuote] = useState(null); const [q, setQ] = useState("");
+  const [abroad, setAbroad] = useState(null); const [quote, setQuote] = useState(null); const [q, setQ] = useState(""); const [bribe, setBribe] = useState(0);
   const load = () => call("travel_state").then(x => { setD(x); setSel(s => (s && x.cities.find(c => c.id === s.id)) || x.cities.find(c => !c.here && c.lvl <= me.level) || x.cities[0]); }).catch(() => {});
   useEffect(() => { load(); }, [me.city, me.status, me.country]);
   useEffect(() => { if (d) loadOutline(d.country).then(setOutline).catch(() => setOutline(null)); }, [d?.country]);
@@ -84,14 +93,14 @@ export function Travel() {
   const filtered = useMemo(() => !d ? [] : d.countries.filter(k => !q || k.name.toLowerCase().includes(q.toLowerCase())), [d, q]);
   if (!d) return <Empty title="Loading…" />;
   const here = d.cities.find(c => c.here) || { id: d.city, name: d.trip?.to_name || "", here: true };
-  const goTrip = (dest, o) => run("travel_go", { p_city: dest, p_mode: o.mode }, r => {
+  const goTrip = (dest, o) => run("travel_go", { p_city: dest, p_mode: o.mode, p_bribe: o.intl && d.contraband > 0 ? bribe : 0 }, r => {
     load();
     if (r.caught) showSheet({ verdict: "Caught", tone: "bad", title: r.ship ? "Stowing away at sea" : "Stowing away", pic: <span className="thumb modeic">{r.ship ? <Ic.Ship /> : <Ic.Truck />}</span>,
       story: r.ship ? `A deckhand found you behind the containers before the ship left port. The captain handed you to the harbour police, and you paid ${money(r.fine)} to make it go away.`
         : `The driver checked the load at the first stop and found you behind a pallet of milk powder. You paid ${money(r.fine)} to make it go away and walked back into town.` });
     else if (r.searched) showSheet({ verdict: "Searched", tone: "bad", title: "Customs", pic: <span className="thumb modeic"><Ic.ShieldCheck /></span>,
-      story: `An officer waved you over and went through every bag. They found ${r.seized} things you shouldn't have had, took the lot, fined you ${money(r.fine)} and kept you in a little room for ${r.held} minutes. You're on your way to ${r.to} now, a lot lighter.` });
-    else toast(`On your way to ${r.to}: ${mins(r.minutes)}${r.cost ? `, ${money(r.cost)}` : ""}.`, "good");
+      story: `${r.bribe ? `You slipped ${money(r.bribe)} to a man in a uniform, and it didn't help. ` : ""}An officer waved you over and went through every bag. They found ${r.seized} things you shouldn't have had, took the lot, fined you ${money(r.fine)} and kept you in a little room for ${r.held} minutes. You're on your way to ${r.to} now, a lot lighter.` });
+    else toast(`On your way to ${r.to}: ${mins(r.minutes)}${r.cost ? `, ${money(r.cost)}` : ""}.${r.bribe ? ` The ${money(r.bribe)} bribe worked: customs waved you through.` : r.odds ? " Customs waved you through." : ""}`, "good");
   });
   const away = d.city !== "home";
   const inCountry = d.country_name;
@@ -100,6 +109,9 @@ export function Travel() {
       <div className="pagehead"><div><h1>Travel</h1><p>Get out of {d.home_name}. Every town sells things you can't get at home, and most of them are worth more back here. How you travel decides how long it takes, what it costs and how much you can carry back. While you're on the road, you can't do anything else.</p></div>
         <Seg label="Travel" value={tab} onChange={setTab} options={[["go", `${flag(d.country)} ${inCountry}`], ["abroad", "Abroad"], ...(away && !d.on_road ? [["shop", `Shop in ${here.name}`]] : []), ["gear", "Gear"]]} /></div>
       {d.on_road && <OnRoad d={d} onDone={() => { refresh(); load(); }} />}
+      {!d.on_road && d.country !== d.home_country && tab !== "abroad" && <div className="panel"><div className="body row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <span>{flag(d.country)} <b>You're in {here.name}, {d.country_name}.</b> <span className="muted">{d.home_name} is {num(d.countries.find(k => k.home)?.km || 0)} km away.</span></span>
+        <button className="btn sm" onClick={() => { setAbroad(d.countries.find(k => k.home)); setTab("abroad"); }}><Ic.Plane />Fly home</button></div></div>}
       {tab === "go" && <div className="travelgrid">
         <div className="panel mappanel"><div className="body">{outline ? <CountryMap outline={outline} cities={d.cities} sel={sel} onSel={setSel} me={me} /> : <Empty title="Drawing the map…" />}
           <p className="tiny" style={{ textAlign: "center" }}>{d.on_road ? `On the road to ${d.trip.to_name}.` : `You're in ${here.name}.`} Tap a town.</p></div></div>
@@ -108,7 +120,7 @@ export function Travel() {
             {sel.here ? (d.on_road ? <p className="tiny">The shops open when you arrive.</p> : sel.id === "home" ? <p className="tiny">Pick somewhere to go on the map, or fly abroad.</p>
               : <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><button className="btn" onClick={() => setTab("shop")}><Ic.ShoppingBag />Shop in {sel.name}</button></div>)
               : d.on_road ? <p className="tiny">You can plan your next move once you arrive.</p> : me.level < sel.lvl ? <p className="tiny"><Ic.Lock style={{ width: 14, verticalAlign: -2 }} /> {sel.name} opens up at level {sel.lvl}.</p>
-              : d.blocked ? <p className="tiny">{d.blocked}</p> : <Options list={sel.options} d={d} onGo={o => goTrip(sel.id, o)} />}
+              : d.blocked ? <p className="tiny">{d.blocked}</p> : <Options list={sel.options} d={d} bribe={bribe} setBribe={setBribe} onGo={o => goTrip(sel.id, o)} />}
           </Panel>}
           <Panel title={`Towns in ${inCountry}`} flush>
             <div className="list">{d.cities.filter(c => !c.here).map(c => { const locked = me.level < c.lvl; const fast = c.options.find(o => o.ok); return (
@@ -135,7 +147,7 @@ export function Travel() {
           </Panel>
           {abroad ? <Panel title={`${flag(abroad.iso)} ${abroad.name}`} note={abroad.here ? "You're already in this country. Use the map to get around." : `Fly into ${abroad.hub_name}, ${num(abroad.km)} km away.`}>
             {abroad.here ? <button className="btn" onClick={() => setTab("go")}>Show the map</button> : d.on_road ? <p className="tiny">You can book once you arrive.</p>
-              : d.blocked ? <p className="tiny">{d.blocked}</p> : <Options list={quote?.options} d={d} onGo={o => goTrip(abroad.hub, o)} />}
+              : d.blocked ? <p className="tiny">{d.blocked}</p> : <Options list={quote?.options} d={d} bribe={bribe} setBribe={setBribe} onGo={o => goTrip(abroad.hub, o)} />}
           </Panel> : <Panel><Empty title="Pick a country">Tap a dot on the map or search the list.</Empty></Panel>}
         </div>
       </div>}

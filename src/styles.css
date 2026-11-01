@@ -574,3 +574,6 @@ a.btn{text-decoration:none}
 .panel.alley{border-color:color-mix(in srgb,var(--brick) 45%,var(--rope))}
 .panel.alley .ph h2,.panel.alley h3{color:var(--brick)}
 @media (max-width:820px){.travelgrid.flip{grid-template-columns:1fr}.countrylist{max-height:320px}}
+.bribe{display:flex;flex-direction:column;gap:10px;padding:12px 14px;margin-bottom:12px;border-radius:var(--r-panel);background:var(--brick-soft);border:1px solid color-mix(in srgb,var(--brick) 35%,transparent)}
+.bribe b{color:var(--brick)}
+.tiny.bad{color:var(--brick)}

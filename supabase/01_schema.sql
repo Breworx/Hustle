@@ -3177,7 +3177,7 @@ begin
   onroad := p.trip_until > now();
   return jsonb_build_object('city', p.city, 'country', ctry, 'country_name', (select name from game.countries where iso = ctry), 'home_country', p.country,
     'home_name', (select name from game.cities where id = 'home'),
-    'trip', p.trip, 'trip_until', p.trip_until, 'on_road', onroad, 'bag', p.bag, 'contraband', game.contraband(p.id),
+    'trip', p.trip, 'trip_until', p.trip_until, 'on_road', onroad, 'bag', p.bag, 'contraband', game.contraband(p.id), 'bribes', jsonb_build_array(0, game.bribe_cost(p.id, 1), game.bribe_cost(p.id, 2)),
     'cap', coalesce((p.trip->>'cap')::int, 0), 'blocked', case when p.jail_until > now() then 'You''re in the cells.' when p.hosp_until > now() then 'You''re in A&E.'
       when p.travel_until > now() then 'You''re still in the taxi.' when onroad then null
       when exists (select 1 from game.fights where attacker = p.id and status = 'on') then 'You''re in the middle of a fight.' end,
@@ -3187,9 +3187,10 @@ begin
         'options', case when c.id = p.city or onroad then '[]'::jsonb else game.trip_options(p, here, c) end,
         'goods', (select count(*) from game.city_shop s where s.city = c.id)) order by c.sort)
       from game.cities x cross join lateral game.place(p, x.id) c where x.country = ctry or (x.id = 'home' and p.country = ctry)),
-    'countries', (select jsonb_agg(jsonb_build_object('iso', k.iso, 'name', k.name, 'zone', k.zone, 'hub', k.hub, 'hub_name', h.name,
+    -- Abroad, your own country's way in is Greyhaven itself.
+    'countries', (select jsonb_agg(jsonb_build_object('iso', k.iso, 'name', k.name, 'zone', k.zone, 'hub', h.id, 'hub_name', h.name,
         'km', round(game.km(here, h)), 'home', k.iso = p.country, 'here', k.iso = ctry) order by k.name)
-      from game.countries k join game.cities h on h.id = k.hub));
+      from game.countries k cross join lateral game.place(p, case when k.iso = p.country then 'home' else k.hub end) h));
 end $$;
 
 -- Every way to reach one place, anywhere in the world.
@@ -3204,9 +3205,18 @@ begin
     'options', case when dest.id = p.city or p.trip_until > now() then '[]'::jsonb else game.trip_options(p, game.place(p, p.city), dest) end);
 end $$;
 
-create or replace function public.travel_go(p_city text, p_mode text) returns jsonb
+-- Customs bribes: a small one or a big one, paid up front, makes a search less likely. It never makes it impossible.
+create or replace function game.bribe_cost(pid uuid, tier int) returns bigint language sql stable as $$
+  select case tier when 1 then greatest(200, round(v * 0.12)) when 2 then greatest(500, round(v * 0.3)) else 0 end::bigint
+  from (select coalesce(sum(x.qty * i.value), 0) v from game.inventory x join game.items i on i.id = x.item_id where x.player_id = pid and i.cat = 'contraband') z $$;
+create or replace function game.bribe_odds(base int, tier int) returns int language sql immutable as $$
+  select greatest(1, round(base * case tier when 1 then 0.5 when 2 then 0.2 else 1 end))::int $$;
+
+drop function if exists public.travel_go(text, text);
+create or replace function public.travel_go(p_city text, p_mode text, p_bribe int default 0) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; here game.cities; dest game.cities; m game.travel_modes; o jsonb; mins numeric; fine bigint; held int := 0; seized int := 0; seized_value bigint := 0;
+  tier int := greatest(0, least(2, coalesce(p_bribe, 0))); bribe bigint := 0; odds int;
 begin
   perform game.fights_tick();
   p := game.me();
@@ -3239,11 +3249,19 @@ begin
   mins := (o->>'minutes')::numeric;
   if m.id = 'hitch' then mins := greatest(1, round(mins * (0.6 + random() * 0.8))); end if;
   -- Crossing a border with contraband: customs might search you. They take it all, fine you, and hold you for a while.
-  if (o->>'intl')::boolean and game.contraband(p.id) > 0 and random() * 100 < (o->>'customs')::int then
+  if (o->>'intl')::boolean and game.contraband(p.id) > 0 then
+    if tier > 0 then
+      bribe := game.bribe_cost(p.id, tier);
+      if p.cash < (o->>'cost')::bigint + bribe then raise exception 'You can''t afford the fare and the bribe.'; end if;
+      update game.players set cash = cash - bribe where id = p.id;
+    end if;
+    odds := game.bribe_odds((o->>'customs')::int, tier);
+  end if;
+  if odds is not null and random() * 100 < odds then
     select coalesce(sum(v.qty), 0), coalesce(sum(v.qty * i.value), 0) into seized, seized_value
       from game.inventory v join game.items i on i.id = v.item_id where v.player_id = p.id and i.cat = 'contraband';
     delete from game.inventory v using game.items i where i.id = v.item_id and v.player_id = p.id and i.cat = 'contraband';
-    fine := least(p.cash - (o->>'cost')::bigint, round(seized_value * 0.5));
+    fine := least(p.cash - (o->>'cost')::bigint - bribe, round(seized_value * 0.5));
     held := 20 + floor(random() * 40)::int;
     mins := mins + held;
     update game.players set cash = cash - greatest(0, fine), heat = least(100, heat + 25), bag = greatest(0, bag - seized) where id = p.id;
@@ -3258,7 +3276,7 @@ begin
   perform game.track(p.id, 'trip', 1); perform game.track(p.id, 'trip:' || dest.id, 1);
   if (o->>'intl')::boolean then perform game.track(p.id, 'abroad', 1); end if;
   return jsonb_build_object('to', dest.name, 'minutes', mins, 'cost', (o->>'cost')::bigint, 'mode', o->>'name', 'ferry', (o->>'ferry')::boolean,
-    'searched', seized > 0, 'seized', seized, 'fine', case when seized > 0 then greatest(0, fine) end, 'held', held);
+    'searched', seized > 0, 'seized', seized, 'fine', case when seized > 0 then greatest(0, fine) end, 'held', held, 'bribe', bribe, 'odds', odds);
 end $$;
 
 -- Pick your country (at sign-up, or later from your account while you're home).
