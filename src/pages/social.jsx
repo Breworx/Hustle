@@ -69,6 +69,8 @@ function CrewView({ id }) {
       <span className="crewmark lg">{c.tag}</span>
       <div className="grow"><h1>{c.name}</h1>
         <p className="muted">{c.motto ? `“${c.motto}”` : "No motto yet."} Ranked #{c.rank} with {num(c.respect)} respect. Founded {new Date(c.created_at).toLocaleDateString("en-NZ", { month: "long", year: "numeric" })}.</p></div>
+      {c.war && <button className="btn danger" onClick={() => go("war")}><Ic.Swords />At war with {c.war.vs}</button>}
+      {!c.mine && c.can_declare && !c.war && <button className="btn danger" onClick={() => go("war")}><Ic.Swords />Declare war</button>}
       {c.mine ? <button className="btn ghost" disabled={busy} onClick={() => run("crew_leave", {}, r => { refresh(); toast(r.disbanded ? "You were the last one. The crew is no more." : "You've left the crew."); go("crews"); })}><Ic.LogOut />Leave crew</button>
         : !me.crew_id && (c.applied ? <span className="pill">Application sent</span> : <button className="btn" disabled={busy} onClick={() => act("crew_apply", { p_id: c.id, p_note: "" }, "Application sent.")}>Apply to join</button>)}
     </div></div>
@@ -114,6 +116,10 @@ function CrewView({ id }) {
           <div className="row"><input className="input" maxLength={140} value={motto ?? c.motto} onChange={e => setMotto(e.target.value)} aria-label="Crew motto" />
             <button className="btn ghost" disabled={busy || motto === null} onClick={() => run("crew_motto", { p_motto: motto }, () => { setMotto(null); load(); })}>Save</button></div>
         </Panel>}
+        {c.wars?.length > 0 && <Panel title="Wars" flush><div className="list">{c.wars.map(w => (
+          <div key={w.id} className="li"><Ic.Swords style={{ width: 16, color: w.result === "won" ? "var(--seaglass)" : w.result === "lost" ? "var(--brick)" : "var(--mist)" }} />
+            <div><div className="t small">{w.result === "active" ? `At war with ${w.vs}` : w.result === "won" ? `Beat ${w.vs}` : w.result === "lost" ? `Lost to ${w.vs}` : `Drew with ${w.vs}`}</div>
+              <div className="s">{Math.round(w.ours)} to {Math.round(w.theirs)}{w.surrendered ? ", by surrender" : ""}{w.loot && w.result !== "draw" ? `, ${money(w.loot)} ${w.result === "won" ? "taken" : "lost"}` : ""}</div></div><div className="act tiny">{ago(w.at)}</div></div>))}</div></Panel>}
         <Panel title="What's been happening" flush>
           <div className="list">{c.log.map((l, i) => <div key={i} className="li"><Ic.Flag style={{ width: 16, color: "var(--mist)" }} /><div className="s" style={{ color: "var(--fog)" }}>{l.body}</div><div className="act tiny">{ago(l.at)}</div></div>)}</div>
         </Panel>

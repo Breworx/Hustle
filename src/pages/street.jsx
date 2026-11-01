@@ -64,6 +64,7 @@ export function Street() {
         </div>
       </section>
 
+      {state.war && <button className="eventbar war" onClick={() => go("war")}><Ic.Siren /><span className="grow"><b>Your crew is at war with {state.war.them_name}.</b> {state.war.us} {Math.round(state.war.ours)}, {state.war.them} {Math.round(state.war.theirs)}. Every hit counts.</span><Ic.ChevronRight /></button>}
       {state.season && <button className="eventbar" onClick={() => go("event")}><Ic.PartyPopper /><span className="grow"><b>{state.season.name} is on.</b> Limited items are dropping from jobs and fights, and there's a leaderboard with trophies for the top ten.</span><Ic.ChevronRight /></button>}
       {state.mission_ready && <button className="eventbar quiet" onClick={() => go("missions")}><Ic.ScrollText /><span className="grow"><b>Your story mission is ready.</b> Go and see what happens next.</span><Ic.ChevronRight /></button>}
       <Goals />

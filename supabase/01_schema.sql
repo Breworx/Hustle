@@ -195,6 +195,48 @@ create table if not exists game.season_claims(season text not null, year int not
 create table if not exists game.turf(id bigint generated always as identity primary key, district text not null, crew_id bigint not null references game.crews(id) on delete cascade,
   pts numeric not null, at timestamptz not null default now());
 create index if not exists turf_recent on game.turf (district, at desc);
+-- Crew wars: 48 hours, points for every win against the other crew, loot for the winner.
+create table if not exists game.wars(id bigint generated always as identity primary key,
+  attacker bigint references game.crews(id) on delete set null, defender bigint references game.crews(id) on delete set null,
+  a_name text not null, d_name text not null, a_tag text not null, d_tag text not null,
+  started_at timestamptz not null default now(), ends_at timestamptz not null, ended_at timestamptz,
+  a_score numeric not null default 0, d_score numeric not null default 0,
+  status text not null default 'active', winner bigint, loot bigint not null default 0);
+create index if not exists wars_active on game.wars (status, ends_at);
+create table if not exists game.war_hits(id bigint generated always as identity primary key, war_id bigint not null references game.wars(id) on delete cascade,
+  crew_id bigint, player_id uuid references game.players(id) on delete set null, target uuid references game.players(id) on delete set null,
+  pts numeric not null, cash bigint not null default 0, at timestamptz not null default now());
+create index if not exists war_hits_war on game.war_hits (war_id, at desc);
+create index if not exists war_hits_player on game.war_hits (player_id);
+-- Companies: legitimate businesses players start and staff (types are loaded by 02_content.sql).
+create table if not exists game.company_types(id text primary key, name text not null, cost bigint not null, lvl int not null, base int not null,
+  perk text not null, max numeric not null, blurb text not null, sort int not null);
+create table if not exists game.company_stars(stars int primary key, rep int not null);
+create table if not exists game.companies(id bigint generated always as identity primary key, type text not null references game.company_types(id),
+  name text not null check (char_length(name) between 3 and 30), owner uuid references game.players(id) on delete set null,
+  funds bigint not null default 0 check (funds >= 0), rep int not null default 0, created_at timestamptz not null default now());
+create unique index if not exists companies_name_ci on game.companies (lower(name));
+create table if not exists game.company_apps(company_id bigint not null references game.companies(id) on delete cascade, player_id uuid not null references game.players(id) on delete cascade,
+  note text not null default '', at timestamptz not null default now(), primary key (company_id, player_id));
+create table if not exists game.company_log(id bigint generated always as identity primary key, company_id bigint not null references game.companies(id) on delete cascade,
+  body text not null, at timestamptz not null default now());
+alter table game.players add column if not exists company_id bigint references game.companies(id) on delete set null;
+alter table game.players add column if not exists company_wage bigint not null default 0;
+alter table game.players add column if not exists company_at timestamptz;
+alter table game.players add column if not exists company_joined timestamptz;
+alter table game.players add column if not exists company_shifts int not null default 0;
+do $$ declare t text; begin
+  foreach t in array array['company_types','company_stars','companies','company_apps','company_log'] loop
+    execute format('alter table game.%I enable row level security', t); execute format('revoke all on game.%I from public', t);
+  end loop;
+end $$;
+create or replace function game.cstars(r int) returns int language sql stable as $$
+  select greatest(1, (select count(*) from game.company_stars where rep <= r))::int $$;
+do $$ declare t text; begin
+  foreach t in array array['wars','war_hits'] loop
+    execute format('alter table game.%I enable row level security', t); execute format('revoke all on game.%I from public', t);
+  end loop;
+end $$;
 alter table game.items add column if not exists season text;
 alter table game.players add column if not exists career text;
 alter table game.players add column if not exists career_rank int not null default 0;
@@ -222,7 +264,9 @@ create or replace function game.hperk(pid uuid, k text) returns numeric language
                 when 'travel_time' then least(0.9, t) when 'heat' then least(1.5, t) when 'travel_free' then least(1, t) when 'travel_fast' then least(1, t) else t end
   from (select coalesce((select game.pval(h.perks->k) from game.players p join game.properties h on h.id = p.property where p.id = pid), 0)
              + coalesce((select game.pval(v.perks->k) from game.players p join game.vehicles v on v.id = p.vehicle where p.id = pid), 0)
-             + coalesce((select c.max * p.career_rank / 10.0 from game.players p join game.careers c on c.id = p.career where p.id = pid and c.perk = k), 0) t) x $$;
+             + coalesce((select c.max * p.career_rank / 10.0 from game.players p join game.careers c on c.id = p.career where p.id = pid and c.perk = k), 0)
+             + coalesce((select t.max * game.cstars(co.rep) / 10.0 from game.players p join game.companies co on co.id = p.company_id
+                         join game.company_types t on t.id = co.type where p.id = pid and t.perk = k), 0) t) x $$;
 alter table game.messages add column if not exists channel text not null default 'city';
 create index if not exists messages_channel on game.messages (channel, id desc);
 
@@ -471,6 +515,7 @@ create or replace function public.get_state() returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players;
 begin
+  perform game.wars_tick();
   p := game.me();
   perform game.medal_check(p.id);
   return jsonb_build_object(
@@ -486,6 +531,13 @@ begin
              'apps', case when p.crew_role in ('leader', 'officer') then (select count(*) from game.crew_apps a where a.crew_id = c.id) else 0 end)
              from game.crews c where c.id = p.crew_id),
     'goals_ready', game.goals_ready(p.id),
+    'company', (select jsonb_build_object('id', c.id, 'name', c.name, 'owner', c.owner = p.id,
+                  'apps', case when c.owner = p.id then (select count(*) from game.company_apps a where a.company_id = c.id) else 0 end,
+                  'ready', p.company_at is null or p.company_at < now() - interval '20 hours') from game.companies c where c.id = p.company_id),
+    'war', (select jsonb_build_object('id', w.id, 'us', case when w.attacker = p.crew_id then w.a_tag else w.d_tag end, 'them', case when w.attacker = p.crew_id then w.d_tag else w.a_tag end,
+              'them_name', case when w.attacker = p.crew_id then w.d_name else w.a_name end,
+              'ours', case when w.attacker = p.crew_id then w.a_score else w.d_score end, 'theirs', case when w.attacker = p.crew_id then w.d_score else w.a_score end, 'ends_at', w.ends_at)
+            from game.wars w where w.status = 'active' and p.crew_id in (w.attacker, w.defender) limit 1),
     'season', (select jsonb_build_object('id', s.id, 'name', s.name, 'icon', s.icon) from game.seasons s where s.id = game.season_now()),
     'mission_ready', (select (p.mission->>'have')::numeric >= m.n from game.missions m where m.chain = p.mission->>'chain' and m.step = (p.mission->>'step')::int),
     'shift_ready', p.career is not null and (p.career_at is null or p.career_at < now() - interval '20 hours'),
@@ -616,21 +668,25 @@ end $$;
 -- ---------- player vs player ----------
 create or replace function public.attack(p_target uuid) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players; t game.players; pa numeric; pd numeric; ch numeric; mug bigint := 0; secs int; xp int;
+declare p game.players; t game.players; pa numeric; pd numeric; ch numeric; mug bigint := 0; secs int; xp int; w game.wars; wp numeric;
 begin
+  perform game.wars_tick();
   p := game.me(); perform game.need_free(p);
   if p_target = p.id then raise exception 'You can''t attack yourself.'; end if;
   if p.level < 3 then raise exception 'You need level 3 before you can attack other players.'; end if;
   select * into t from game.players where id = p_target for update;
   if not found then raise exception 'Nobody by that name.'; end if;
   if game.status(t) <> 'ok' then raise exception '% isn''t around right now.', t.name; end if;
-  if t.district <> p.district then raise exception '% is in another district.', t.name; end if;
+  w := game.war_between(p.crew_id, t.crew_id);
+  -- At war, you can hit the enemy anywhere in the city. Otherwise you have to find them on your street.
+  if t.district <> p.district and w.id is null then raise exception '% is in another district.', t.name; end if;
   if p.crew_id is not null and t.crew_id = p.crew_id then raise exception '% is in your crew.', t.name; end if;
   if t.level < 3 or t.created_at > now() - interval '1 day' then raise exception '% is new to the city. Leave them be for now.', t.name; end if;
   if p.stamina < 25 then raise exception 'You need 25 stamina to start a fight.'; end if;
   if p.health < p.max_health * 0.3 then raise exception 'You''re too beaten up. Heal first.'; end if;
-  if exists (select 1 from game.attacks where attacker = p.id and defender = t.id and at > now() - interval '10 minutes') then
-    raise exception 'You hit % recently. Give it ten minutes.', t.name; end if;
+  if exists (select 1 from game.attacks where attacker = p.id and defender = t.id
+             and at > now() - case when w.id is not null then interval '3 minutes' else interval '10 minutes' end) then
+    raise exception 'You hit % recently. Give it % minutes.', t.name, case when w.id is not null then 'three' else 'ten' end; end if;
   pa := game.power(p); pd := game.power(t);
   ch := least(0.95, greatest(0.05, 1 / (1 + exp(-8 * (pa / (pa + pd) - 0.5)))));
   update game.players set stamina = stamina - 25, heat = least(100, heat + 5) where id = p.id;
@@ -649,7 +705,14 @@ begin
       perform game.turf_add(p.id, p.district, case when t.crew_id is not null then 10 else 4 end);
     end if;
     perform game.track(p.id, 'fight_win', 1);
-    return jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'chance', round(ch * 100));
+    if w.id is not null then
+      -- War points: bigger targets are worth more.
+      wp := round(3 + t.level / 3.0, 1);
+      insert into game.war_hits(war_id, crew_id, player_id, target, pts, cash) values (w.id, p.crew_id, p.id, t.id, wp, mug);
+      update game.wars set a_score = a_score + case when attacker = p.crew_id then wp else 0 end, d_score = d_score + case when defender = p.crew_id then wp else 0 end where id = w.id;
+      perform game.track(p.id, 'war_hit', 1);
+    end if;
+    return jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'chance', round(ch * 100), 'war_pts', wp);
   else
     secs := round((180 + floor(random() * 300)) * (1 - game.hperk(p.id, 'hosp')))::int;
     update game.players set losses = losses + 1, health = greatest(1, round(health * 0.2)),
@@ -658,6 +721,11 @@ begin
     perform game.gain_xp(t.id, 5); perform game.add_skill(t.id, 'fight', 5); perform game.add_skill(p.id, 'fight', 3);
     insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, false, 0);
     perform game.notify(t.id, 'defended', format('%s tried to attack you and lost.', p.name));
+    if w.id is not null then
+      -- Fighting someone off in a war is worth a point to their crew.
+      insert into game.war_hits(war_id, crew_id, player_id, target, pts) values (w.id, t.crew_id, t.id, p.id, 1);
+      update game.wars set a_score = a_score + case when attacker = t.crew_id then 1 else 0 end, d_score = d_score + case when defender = t.crew_id then 1 else 0 end where id = w.id;
+    end if;
     return jsonb_build_object('won', false, 'name', t.name, 'secs', secs, 'chance', round(ch * 100));
   end if;
 end $$;
@@ -701,6 +769,7 @@ begin
     'medals', (select count(*) from game.medals_earned where player_id = t.id),
     'vehicle_name', (select name from game.vehicles where id = t.vehicle),
     'career_title', (select c.ranks[t.career_rank] || ', ' || lower(c.name) from game.careers c where c.id = t.career),
+    'company', (select jsonb_build_object('id', c.id, 'name', c.name, 'owner', c.owner = t.id, 'stars', game.cstars(c.rep)) from game.companies c where c.id = t.company_id),
     'crew_role', t.crew_role,
     'recent', coalesce((select jsonb_agg(jsonb_build_object('at', a.at, 'won', a.attacker_won, 'cash', a.cash,
                  'attacker', (select name from game.players where id = a.attacker), 'defender', (select name from game.players where id = a.defender)) order by a.at desc)
@@ -1367,6 +1436,14 @@ begin
                  order by case m.crew_role when 'leader' then 0 when 'officer' then 1 else 2 end, m.level desc) from game.players m where m.crew_id = c.id), '[]'),
     'apps', case when boss then coalesce((select jsonb_agg(game.card(m) || jsonb_build_object('note', a.note, 'at', a.at) order by a.at)
                  from game.crew_apps a join game.players m on m.id = a.player_id where a.crew_id = c.id), '[]') end,
+    'war', (select jsonb_build_object('id', w.id, 'vs', case when w.attacker = c.id then w.d_name else w.a_name end, 'ends_at', w.ends_at) from game.wars w where w.status = 'active' and c.id in (w.attacker, w.defender) limit 1),
+    'can_declare', not mine and p.crew_role = 'leader' and game.war_block(p.crew_id, c.id) is null,
+    'declare_block', case when not mine and p.crew_role = 'leader' then game.war_block(p.crew_id, c.id) end,
+    'wars', coalesce((select jsonb_agg(jsonb_build_object('id', w.id, 'vs', case when w.attacker = c.id then w.d_name else w.a_name end,
+              'ours', case when w.attacker = c.id then w.a_score else w.d_score end, 'theirs', case when w.attacker = c.id then w.d_score else w.a_score end,
+              'result', case when w.status = 'active' then 'active' when w.winner is null then 'draw' when w.winner = c.id then 'won' else 'lost' end,
+              'surrendered', w.status = 'surrendered', 'loot', w.loot, 'at', coalesce(w.ended_at, w.started_at)) order by w.id desc)
+            from (select * from game.wars where c.id in (attacker, defender) order by id desc limit 10) w), '[]'),
     'log', case when mine then coalesce((select jsonb_agg(jsonb_build_object('body', body, 'at', at) order by id desc)
                  from (select * from game.crew_log where crew_id = c.id order by id desc limit 25) l), '[]') end);
 end $$;
@@ -2051,7 +2128,10 @@ create or replace function game.player_stats(pid uuid) returns jsonb language sq
     'missions', p.missions_done, 'career', p.career_rank,
     'turf', case when p.crew_id is null then 0 else (select count(*) from game.districts d where game.turf_owner(d.id) = p.crew_id) end,
     'days', floor(extract(epoch from now() - p.created_at) / 86400), 'founder', case when p.founder is not null then 1 else 0 end,
-    'events', coalesce((select sum(points) from game.season_points where player_id = p.id), 0), 'power', round(game.power(p)))
+    'events', coalesce((select sum(points) from game.season_points where player_id = p.id), 0), 'power', round(game.power(p)),
+    'warhits', (select count(*) from game.war_hits where player_id = p.id and pts > 1),
+    'company', coalesce((select game.cstars(rep) from game.companies where owner = p.id), 0),
+    'warwins', (select count(distinct h.war_id) from game.war_hits h join game.wars w on w.id = h.war_id where h.player_id = p.id and w.winner = h.crew_id))
   from game.players p where p.id = pid $$;
 
 -- Award any medals newly earned, with one notification for the lot.
@@ -2152,6 +2232,335 @@ begin
 end $$;
 
 
+
+-- ---------- crew wars ----------
+create or replace function game.war_between(a bigint, b bigint) returns game.wars language sql stable as $$
+  select * from game.wars where status = 'active' and ends_at > now() and a is not null and b is not null
+    and ((attacker = a and defender = b) or (attacker = b and defender = a)) limit 1 $$;
+
+-- Why a crew can't declare war on another right now (null if it can).
+create or replace function game.war_block(a bigint, b bigint) returns text language sql stable as $$
+  select case
+    when a is null or b is null or a = b then 'Not possible.'
+    when exists (select 1 from game.wars where status = 'active' and (attacker in (a, b) or defender in (a, b))) then 'One of the crews is already at war.'
+    when exists (select 1 from game.wars where ((attacker = a and defender = b) or (attacker = b and defender = a)) and ended_at > now() - interval '3 days') then 'You fought them in the last three days. Give it time.'
+    when exists (select 1 from game.wars where b in (attacker, defender) and ended_at > now() - interval '12 hours') then 'They''ve just come out of a war. They get 12 hours of peace.'
+    when (select count(*) from game.players where crew_id = a) < 2 or (select count(*) from game.players where crew_id = b) < 2 then 'Both crews need at least two members.'
+    when (select vault from game.crews where id = a) < 100000 then 'Declaring war costs $100,000 from your crew vault.'
+  end $$;
+
+-- Close any wars whose time is up.
+create or replace function game.wars_tick() returns void language plpgsql as $$
+declare w game.wars;
+begin
+  for w in select * from game.wars where status = 'active' and ends_at <= now() for update skip locked loop
+    perform game.war_finish(w.id, case when w.a_score > w.d_score then w.attacker when w.d_score > w.a_score then w.defender end, 'over');
+  end loop;
+end $$;
+
+create or replace function game.war_finish(wid bigint, win bigint, how text) returns void language plpgsql as $$
+declare w game.wars; lose bigint; spoils bigint := 0; wn text; ln text; m record;
+begin
+  select * into w from game.wars where id = wid for update;
+  if w.status <> 'active' then return; end if;
+  lose := case when win = w.attacker then w.defender when win = w.defender then w.attacker end;
+  if win is not null then
+    -- The winners take 20% of the losers' vault and a lot of respect.
+    select floor(vault * 0.2) into spoils from game.crews where id = lose;
+    update game.crews set vault = vault - coalesce(spoils, 0), respect = greatest(0, respect - 50) where id = lose;
+    update game.crews set vault = vault + coalesce(spoils, 0), respect = respect + 100 where id = win;
+    wn := case when win = w.attacker then w.a_name else w.d_name end; ln := case when win = w.attacker then w.d_name else w.a_name end;
+    -- Every winner who landed a hit gets a war trophy.
+    for m in select distinct player_id from game.war_hits where war_id = wid and crew_id = win and pts > 1 and player_id is not null loop
+      perform game.give(m.player_id, 'war_trophy', 1);
+    end loop;
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', case when how = 'surrender' then format('%s have surrendered to %s. The winners walk off with %s.', ln, wn, game.fmt(coalesce(spoils, 0)))
+      else format('The war is over: %s beat %s, %s to %s, and take %s from their vault.', wn, ln, round(greatest(w.a_score, w.d_score)), round(least(w.a_score, w.d_score)), game.fmt(coalesce(spoils, 0))) end);
+  else
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('The war between %s and %s ended in a draw. Nobody is happy.', w.a_name, w.d_name));
+  end if;
+  update game.wars set status = case when how = 'surrender' then 'surrendered' else 'over' end, winner = win, loot = coalesce(spoils, 0), ended_at = now() where id = wid;
+  for m in select id, crew_id from game.players where crew_id in (w.attacker, w.defender) loop
+    perform game.notify(m.id, 'war', case when win is null then 'The war ended in a draw.' when m.crew_id = win then format('You won the war. Your crew takes %s.', game.fmt(coalesce(spoils, 0)))
+      else format('You lost the war. They take %s from your vault.', game.fmt(coalesce(spoils, 0))) end);
+  end loop;
+end $$;
+
+create or replace function public.war_declare(p_crew bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; a game.crews; d game.crews; why text; wid bigint; m record;
+begin
+  perform game.wars_tick();
+  p := game.me();
+  if p.crew_role is distinct from 'leader' then raise exception 'Only a crew leader can declare war.'; end if;
+  why := game.war_block(p.crew_id, p_crew);
+  if why is not null then raise exception '%', why; end if;
+  select * into a from game.crews where id = p.crew_id for update;
+  select * into d from game.crews where id = p_crew;
+  update game.crews set vault = vault - 100000 where id = a.id;
+  insert into game.wars(attacker, defender, a_name, d_name, a_tag, d_tag, ends_at) values (a.id, d.id, a.name, d.name, a.tag, d.tag, now() + interval '48 hours') returning id into wid;
+  perform game.crew_note(a.id, format('%s declared war on %s.', p.name, d.name));
+  perform game.crew_note(d.id, format('%s declared war on you.', a.name));
+  for m in select id, crew_id from game.players where crew_id in (a.id, d.id) loop
+    perform game.notify(m.id, 'war', case when m.crew_id = a.id then format('%s declared war on %s. You have 48 hours.', p.name, d.name)
+                                      else format('%s have declared war on your crew. You have 48 hours.', a.name) end);
+  end loop;
+  insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('War! %s [%s] have declared war on %s [%s]. 48 hours. Stay off the streets.', a.name, a.tag, d.name, d.tag));
+  return jsonb_build_object('war', wid);
+end $$;
+
+create or replace function public.war_surrender() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; w game.wars;
+begin
+  p := game.me();
+  if p.crew_role is distinct from 'leader' then raise exception 'Only the leader can surrender.'; end if;
+  select * into w from game.wars where status = 'active' and p.crew_id in (attacker, defender) limit 1;
+  if not found then raise exception 'You''re not at war.'; end if;
+  perform game.war_finish(w.id, case when w.attacker = p.crew_id then w.defender else w.attacker end, 'surrender');
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.war_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; w game.wars; them bigint;
+begin
+  perform game.wars_tick();
+  p := game.me();
+  select * into w from game.wars where status = 'active' and p.crew_id is not null and p.crew_id in (attacker, defender) limit 1;
+  if not found then
+    return jsonb_build_object('war', null, 'role', p.crew_role, 'crew', p.crew_id,
+      'last', (select jsonb_build_object('vs', case when x.attacker = p.crew_id then x.d_name else x.a_name end, 'ours', case when x.attacker = p.crew_id then x.a_score else x.d_score end,
+                 'theirs', case when x.attacker = p.crew_id then x.d_score else x.a_score end, 'result', case when x.winner is null then 'draw' when x.winner = p.crew_id then 'won' else 'lost' end, 'loot', x.loot, 'at', x.ended_at)
+               from game.wars x where p.crew_id in (x.attacker, x.defender) and x.status <> 'active' order by x.id desc limit 1),
+      'targets', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag, 'respect', c.respect,
+                   'members', (select count(*) from game.players m where m.crew_id = c.id), 'block', game.war_block(p.crew_id, c.id)) order by c.respect desc)
+                 from game.crews c where p.crew_role = 'leader' and c.id <> p.crew_id), '[]'));
+  end if;
+  them := case when w.attacker = p.crew_id then w.defender else w.attacker end;
+  return jsonb_build_object('role', p.crew_role, 'war', jsonb_build_object('id', w.id, 'ends_at', w.ends_at, 'started_at', w.started_at,
+      'us', jsonb_build_object('name', case when w.attacker = p.crew_id then w.a_name else w.d_name end, 'tag', case when w.attacker = p.crew_id then w.a_tag else w.d_tag end,
+                               'score', case when w.attacker = p.crew_id then w.a_score else w.d_score end),
+      'them', jsonb_build_object('id', them, 'name', case when w.attacker = p.crew_id then w.d_name else w.a_name end, 'tag', case when w.attacker = p.crew_id then w.d_tag else w.a_tag end,
+                               'score', case when w.attacker = p.crew_id then w.d_score else w.a_score end),
+      'we_declared', w.attacker = p.crew_id),
+    'enemies', coalesce((select jsonb_agg(game.card(m) || jsonb_build_object('power_hint', case
+            when game.power(m) > game.power(p) * 1.5 then 'much stronger' when game.power(m) > game.power(p) * 1.1 then 'stronger'
+            when game.power(m) < game.power(p) * 0.66 then 'much weaker' when game.power(m) < game.power(p) * 0.9 then 'weaker' else 'even' end,
+            'worth', round(3 + m.level / 3.0, 1),
+            'cooldown', (select max(at) + interval '3 minutes' from game.attacks where attacker = p.id and defender = m.id and at > now() - interval '3 minutes'),
+            'until', coalesce(case when m.jail_until > now() then m.jail_until end, case when m.hosp_until > now() then m.hosp_until end, m.travel_until)) order by m.level desc)
+          from game.players m where m.crew_id = them), '[]'),
+    'board', coalesce((select jsonb_agg(x order by x.pts desc) from (
+        select pl.id, pl.name, pl.look, pl.name_color, h.crew_id = p.crew_id ours, sum(h.pts) pts, count(*) filter (where h.pts > 1) hits
+        from game.war_hits h join game.players pl on pl.id = h.player_id where h.war_id = w.id group by pl.id, pl.name, pl.look, pl.name_color, h.crew_id order by sum(h.pts) desc limit 20) x), '[]'),
+    'feed', coalesce((select jsonb_agg(jsonb_build_object('who', (select name from game.players where id = h.player_id), 'target', (select name from game.players where id = h.target),
+          'ours', h.crew_id = p.crew_id, 'pts', h.pts, 'cash', h.cash, 'at', h.at) order by h.id desc)
+        from (select * from game.war_hits where war_id = w.id order by id desc limit 30) h), '[]'));
+end $$;
+
+
+-- ---------- companies ----------
+create or replace function game.company_note(cid bigint, b text) returns void language sql as $$ insert into game.company_log(company_id, body) values (cid, b) $$;
+create or replace function game.company_cap(stars int) returns int language sql immutable as $$ select 3 + stars * 2 $$;
+create or replace function game.company_revenue(t game.company_types, stars int, lvl int) returns bigint language sql immutable as $$
+  select round(t.base * (1 + 0.15 * (stars - 1)) * (0.8 + least(0.7, lvl / 40.0)))::bigint $$;
+
+create or replace function public.company_list() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('mine', p.company_id,
+    'types', (select jsonb_agg(to_jsonb(t) || jsonb_build_object('count', (select count(*) from game.companies c where c.type = t.id)) order by t.sort) from game.company_types t),
+    'stars', (select jsonb_agg(rep order by stars) from game.company_stars),
+    'companies', coalesce((select jsonb_agg(x order by x.stars desc, x.staff desc) from (
+      select c.id, c.name, c.type, game.cstars(c.rep) stars, (select count(*) from game.players m where m.company_id = c.id) staff,
+             game.company_cap(game.cstars(c.rep)) + 1 cap, (select name from game.players where id = c.owner) owner,
+             exists (select 1 from game.company_apps a where a.company_id = c.id and a.player_id = p.id) applied
+      from game.companies c limit 300) x), '[]'));
+end $$;
+
+create or replace function public.company_get(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; t game.company_types; mine boolean; boss boolean; st int;
+begin
+  p := game.me();
+  select * into c from game.companies where id = p_id;
+  if not found then raise exception 'That company has closed down.'; end if;
+  select * into t from game.company_types where id = c.type;
+  mine := p.company_id = c.id; boss := c.owner = p.id; st := game.cstars(c.rep);
+  return jsonb_build_object('id', c.id, 'name', c.name, 'type', to_jsonb(t), 'stars', st, 'rep', c.rep,
+    'next_rep', (select rep from game.company_stars where stars = st + 1), 'cap', game.company_cap(st) + 1, 'created_at', c.created_at,
+    'mine', mine, 'boss', boss, 'funds', case when mine then c.funds end,
+    'perk_now', t.max * st / 10.0,
+    'revenue_me', case when mine then game.company_revenue(t, st, p.level) end,
+    'can_shift', mine and (p.company_at is null or p.company_at < now() - interval '20 hours'), 'next_shift', case when mine then p.company_at + interval '20 hours' end,
+    'applied', exists (select 1 from game.company_apps where company_id = c.id and player_id = p.id),
+    'owner', (select game.card(o) from game.players o where o.id = c.owner),
+    'staff', coalesce((select jsonb_agg(game.card(m) || jsonb_build_object('wage', case when mine then m.company_wage end, 'shifts', m.company_shifts,
+               'worked_today', m.company_at > now() - interval '20 hours', 'joined', m.company_joined, 'is_owner', m.id = c.owner,
+               'earns', game.company_revenue(t, st, m.level)) order by (m.id = c.owner) desc, m.company_shifts desc) from game.players m where m.company_id = c.id), '[]'),
+    'apps', case when boss then coalesce((select jsonb_agg(game.card(m) || jsonb_build_object('note', a.note, 'at', a.at) order by a.at)
+               from game.company_apps a join game.players m on m.id = a.player_id where a.company_id = c.id), '[]') end,
+    'log', case when mine then coalesce((select jsonb_agg(jsonb_build_object('body', body, 'at', at) order by id desc)
+               from (select * from game.company_log where company_id = c.id order by id desc limit 25) l), '[]') end);
+end $$;
+
+create or replace function public.company_start(p_type text, p_name text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; t game.company_types; n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); cid bigint;
+begin
+  p := game.me(); perform game.need_free(p);
+  if p.company_id is not null then raise exception 'You already work at a company. Leave it first.'; end if;
+  select * into t from game.company_types where id = p_type;
+  if not found then raise exception 'No such kind of business.'; end if;
+  if p.level < t.lvl then raise exception 'You need level % to start one of these.', t.lvl; end if;
+  if p.cash < t.cost then raise exception 'Starting one costs %. You have % on you.', game.fmt(t.cost), game.fmt(p.cash); end if;
+  if char_length(n) < 3 or char_length(n) > 30 or n !~ '^[A-Za-z0-9 ''&.,!-]+$' then raise exception 'Company names are 3 to 30 letters, numbers and spaces.'; end if;
+  if exists (select 1 from game.companies where lower(name) = lower(n)) then raise exception 'There''s already a company with that name.'; end if;
+  insert into game.companies(type, name, owner) values (t.id, n, p.id) returning id into cid;
+  update game.players set cash = cash - t.cost, company_id = cid, company_wage = 0, company_joined = now(), company_shifts = 0, company_at = null where id = p.id;
+  delete from game.company_apps where player_id = p.id;
+  perform game.company_note(cid, format('%s opened the doors.', p.name));
+  perform game.track(p.id, 'company', 1);
+  insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('Now open: %s, a new %s owned by %s. They''re hiring.', n, lower(t.name), p.name));
+  return jsonb_build_object('id', cid);
+end $$;
+
+create or replace function public.company_apply(p_id bigint, p_note text default '') returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies;
+begin
+  p := game.me();
+  if p.company_id is not null then raise exception 'You already work at a company.'; end if;
+  select * into c from game.companies where id = p_id;
+  if not found then raise exception 'That company has closed down.'; end if;
+  if (select count(*) from game.company_apps where player_id = p.id) >= 5 then raise exception 'You can have 5 job applications open at once.'; end if;
+  insert into game.company_apps(company_id, player_id, note) values (c.id, p.id, left(coalesce(p_note, ''), 200)) on conflict do nothing;
+  perform game.notify(c.owner, 'company', format('%s applied for a job at %s.', p.name, c.name));
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_withdraw(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me(); delete from game.company_apps where company_id = p_id and player_id = p.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_decide(p_player uuid, p_accept boolean, p_wage bigint default 0) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; t game.players;
+begin
+  p := game.me();
+  select * into c from game.companies where owner = p.id;
+  if not found then raise exception 'You don''t own a company.'; end if;
+  if not exists (select 1 from game.company_apps where company_id = c.id and player_id = p_player) then raise exception 'That application has been withdrawn.'; end if;
+  select * into t from game.players where id = p_player for update;
+  delete from game.company_apps where company_id = c.id and player_id = p_player;
+  if not p_accept then perform game.notify(t.id, 'company', format('%s turned down your application.', c.name)); return jsonb_build_object('ok', true); end if;
+  if t.company_id is not null then raise exception '% already took another job.', t.name; end if;
+  if (select count(*) from game.players where company_id = c.id) - 1 >= game.company_cap(game.cstars(c.rep)) then
+    raise exception 'You''re fully staffed. More stars mean room for more staff.'; end if;
+  update game.players set company_id = c.id, company_wage = greatest(0, least(coalesce(p_wage, 0), 1000000)), company_joined = now(), company_shifts = 0, company_at = null where id = t.id;
+  delete from game.company_apps where player_id = t.id;
+  perform game.notify(t.id, 'company', format('You got the job at %s. Your first shift is waiting.', c.name));
+  perform game.company_note(c.id, format('%s hired %s.', p.name, t.name));
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_staff(p_player uuid, p_action text, p_wage bigint default 0) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; t game.players;
+begin
+  p := game.me();
+  select * into c from game.companies where owner = p.id;
+  if not found then raise exception 'You don''t own a company.'; end if;
+  select * into t from game.players where id = p_player for update;
+  if t.company_id is distinct from c.id or t.id = p.id then raise exception 'They don''t work for you.'; end if;
+  if p_action = 'fire' then
+    update game.players set company_id = null, company_wage = 0, company_joined = null, company_shifts = 0 where id = t.id;
+    perform game.notify(t.id, 'company', format('%s let you go.', c.name));
+    perform game.company_note(c.id, format('%s let %s go.', p.name, t.name));
+  elsif p_action = 'wage' then
+    if p_wage < 0 or p_wage > 1000000 then raise exception 'Wages are between $0 and $1,000,000 a shift.'; end if;
+    update game.players set company_wage = p_wage where id = t.id;
+    perform game.notify(t.id, 'company', format('Your wage at %s is now %s a shift.', c.name, game.fmt(p_wage)));
+  else raise exception 'Unknown action.'; end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.company_funds(p_amount bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; a bigint := coalesce(p_amount, 0);
+begin
+  p := game.me();
+  select * into c from game.companies where owner = p.id for update;
+  if not found then raise exception 'You don''t own a company.'; end if;
+  if a = 0 then raise exception 'Enter an amount.'; end if;
+  if a > 0 and a > p.cash then raise exception 'You only have % on you.', game.fmt(p.cash); end if;
+  if a < 0 and -a > c.funds then raise exception 'The company only has %.', game.fmt(c.funds); end if;
+  update game.players set cash = cash - a where id = p.id;
+  update game.companies set funds = funds + a where id = c.id;
+  perform game.company_note(c.id, case when a > 0 then format('%s put %s into the company.', p.name, game.fmt(a)) else format('%s took %s out of the company.', p.name, game.fmt(-a)) end);
+  return jsonb_build_object('funds', c.funds + a);
+end $$;
+
+-- Work a shift: the company earns money, and pays your wage from its funds.
+create or replace function public.company_shift() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; t game.company_types; st int; st2 int; rev bigint; paid boolean := false; w bigint; m record;
+begin
+  p := game.me(); perform game.need_free(p);
+  if p.company_id is null then raise exception 'You don''t work at a company.'; end if;
+  if p.company_at > now() - interval '20 hours' then raise exception 'You''ve already worked today. Next shift in %.', to_char(p.company_at + interval '20 hours' - now(), 'HH24"h "MI"m"'); end if;
+  select * into c from game.companies where id = p.company_id for update;
+  select * into t from game.company_types where id = c.type;
+  st := game.cstars(c.rep);
+  rev := game.company_revenue(t, st, p.level);
+  w := case when c.owner = p.id then 0 else p.company_wage end;
+  update game.companies set funds = funds + rev, rep = rep + 1 where id = c.id;
+  if w > 0 and c.funds + rev >= w then
+    update game.companies set funds = funds - w where id = c.id;
+    update game.players set cash = cash + w where id = p.id; paid := true;
+  elsif w > 0 then
+    perform game.notify(c.owner, 'company', format('%s couldn''t be paid: the company is out of money.', p.name));
+  end if;
+  update game.players set company_at = now(), company_shifts = company_shifts + 1 where id = p.id;
+  perform game.gain_xp(p.id, 2 + st);
+  perform game.track(p.id, 'company_shift', 1);
+  st2 := game.cstars(c.rep + 1);
+  if st2 > st then
+    perform game.company_note(c.id, format('%s reached %s stars.', c.name, st2));
+    for m in select id from game.players where company_id = c.id loop perform game.notify(m.id, 'company', format('%s just reached %s stars.', c.name, st2)); end loop;
+  end if;
+  return jsonb_build_object('revenue', rev, 'wage', w, 'paid', paid, 'stars', st2, 'star_up', st2 > st);
+end $$;
+
+create or replace function public.company_leave() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.companies; refund bigint; m record;
+begin
+  p := game.me();
+  if p.company_id is null then raise exception 'You don''t work at a company.'; end if;
+  select * into c from game.companies where id = p.company_id for update;
+  if c.owner = p.id then
+    -- Closing down: the owner gets the company's funds back plus half of what it cost to start.
+    refund := c.funds + floor((select cost from game.company_types where id = c.type) * 0.5);
+    for m in select id from game.players where company_id = c.id and id <> p.id loop perform game.notify(m.id, 'company', format('%s has closed down.', c.name)); end loop;
+    update game.players set company_id = null, company_wage = 0, company_joined = null, company_shifts = 0 where company_id = c.id;
+    update game.players set cash = cash + refund where id = p.id;
+    delete from game.companies where id = c.id;
+    return jsonb_build_object('closed', true, 'refund', refund);
+  end if;
+  update game.players set company_id = null, company_wage = 0, company_joined = null, company_shifts = 0 where id = p.id;
+  perform game.company_note(c.id, format('%s quit.', p.name));
+  perform game.notify(c.owner, 'company', format('%s quit %s.', p.name, c.name));
+  return jsonb_build_object('ok', true);
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -2161,7 +2570,8 @@ do $$ declare f record; begin
              'bank','chat_send','chat_recent','leaderboard','item_supply','token_info','token_spend',
              'goals_state','checkin','goal_claim','guide_claim','crew_create','crew_list','crew_get','crew_apply','crew_withdraw','crew_decide',
              'crew_leave','crew_member','crew_vault','crew_motto','dm_send','dm_threads','dm_thread','contact_toggle','report',
-             'property_list','property_move','home_collect','turf_state','season_state','season_claim','career_state','career_join','career_shift',
+             'property_list','property_move','home_collect','turf_state','season_state','season_claim','war_declare','war_surrender','war_state','company_list','company_get','company_start','company_apply','company_withdraw',
+             'company_decide','company_staff','company_funds','company_shift','company_leave','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
              'admin_resolve','admin_delete_message') loop
     execute format('revoke all on function %s from public', f.sig);

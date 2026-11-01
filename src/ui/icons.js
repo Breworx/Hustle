@@ -8,4 +8,5 @@ export {
   Truck, Plane, Sailboat, Medal, Award, ScrollText, BookOpen, Stethoscope, Scale, HardHat, ChefHat, PartyPopper, Snowflake, CloudLightning,
   Ghost, Dice5, Banknote, MapPinned, Gem, Flag, Mail, ShieldCheck, Pencil, Palette, Star, Gift, Target, Crown,
   UserPlus, UserCheck, Ban, VolumeX, Trash2, ChevronRight, Download, Megaphone
+  , Coffee, Factory, Siren
 } from "lucide-react";

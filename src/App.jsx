@@ -18,12 +18,13 @@ import { Crews, CrewPage, Messages } from "./pages/social.jsx";
 import { Home, Collection } from "./pages/home.jsx";
 import { Admin } from "./pages/admin.jsx";
 import { Garage, Career, Medals, Missions, Event } from "./pages/life.jsx";
+import { Companies, Company, WarRoom } from "./pages/business.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["gym", "Gym", Ic.Dumbbell]] },
-  { group: "Your life", items: [["home", "Home", Ic.Building], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
+  { group: "Your life", items: [["home", "Home", Ic.Building], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["companies", "Companies", Ic.Factory], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
   { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
-  { group: "People", items: [["crews", "Crews", Ic.Flag], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
+  { group: "People", items: [["crews", "Crews", Ic.Flag], ["war", "War room", Ic.Siren], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
   { group: "The city", items: [["map", "Map and turf", Ic.Map], ["event", "Events", Ic.PartyPopper], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
 ];
 const TABS = [["street", "Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["market", "Market", Ic.Store]];
@@ -158,7 +159,7 @@ function Banned({ b }) {
   );
 }
 
-const PAGES = { garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
@@ -212,6 +213,8 @@ function badge(k, me, inv, state) {
   if (k === "missions" && state.mission_ready) return <span className="count">1</span>;
   if (k === "career" && state.shift_ready) return <span className="count">1</span>;
   if (k === "event" && state.season) return <span className="count quiet">On</span>;
+  if (k === "war" && state.war) return <span className="count" style={{ background: "var(--brick)", color: "#fff" }}>War</span>;
+  if (k === "companies" && state.company && (state.company.apps || state.company.ready)) return <span className="count">{state.company.apps || 1}</span>;
   if (k === "messages" && state.unread_dms) return <span className="count">{state.unread_dms}</span>;
   if (k === "crews" && state.crew?.apps) return <span className="count">{state.crew.apps}</span>;
   if (k === "tokens" && inv.token) return <span className="count quiet">{inv.token}</span>;

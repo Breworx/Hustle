@@ -18,6 +18,8 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 - **Careers.** Six legitimate day jobs with ten ranks each. Clock in once a day for a wage; promotions make the career's perk stronger.
 - **Story missions.** Eight stories told by recurring characters, 40 missions in all, from Aunty Rose's dairy to The Big One on Casino Island.
 - **Medals.** 126 medals earned automatically as your numbers grow. Wear any one as your title.
+- **Crew wars.** A crew leader declares war on another crew for $100,000 from the vault. For 48 hours members can attack the enemy anywhere in the city; every win scores points, bigger targets are worth more. The winners take 20% of the losers' vault, respect and a war trophy each. Leaders can surrender.
+- **Companies.** Players start legitimate businesses (ten kinds, from a coffee cart to a media empire), hire other players and set their wages. Everyone works one shift a day: the company earns money, pays wages from its funds, and builds reputation towards ten stars. More stars mean more revenue, more staff and a stronger perk for everyone who works there.
 - **Turf.** Crews earn influence in each district from jobs and fights. The crew that runs a district takes a 3% cut of every job done there.
 - **Seasonal events.** Summer Heatwave, Winter Storms, Halloween Night, Fireworks Week and The Christmas Heist, every year, each with limited items and trophies for the top ten.
 - **Collection log.** Every item a player has ever owned, with progress by category.
@@ -98,6 +100,7 @@ Pack prices are in NZD and include GST. They're set in the `token_packs` table i
 - Careers, vehicles and medals: `src/game/life.js`
 - Story missions: `src/game/missions.js`
 - Seasonal events and their items: `src/game/seasons.js`
+- Kinds of company: `src/game/companies.js`
 
 After changing any of these, run `npm run gen-sql` to rebuild `supabase/02_content.sql`, then run that file in the SQL Editor again. The game rules themselves (odds, payouts, cooldowns) are in `supabase/01_schema.sql`.
 

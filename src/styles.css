@@ -480,3 +480,19 @@ a.btn{text-decoration:none}
 .medal.got.t3 .disc{background:#d9a62a;color:#2a1a00}
 .medal.got.t4 .disc{background:#5cc8a0;color:#06231a}
 .medal.got.t5 .disc{background:linear-gradient(135deg,#f2c14e,#b18be8);color:#1a1030;box-shadow:0 0 12px -2px #f2c14e}
+
+/* Companies and crew wars */
+.stars{display:inline-flex;gap:3px;margin-top:4px}
+.stars i{width:9px;height:9px;transform:rotate(45deg);background:var(--deck-3);border-radius:2px}
+.stars i.on{background:var(--sodium)}
+.eventbar.war{border-color:color-mix(in srgb,var(--brick) 55%,transparent);background:var(--brick-soft)}
+.eventbar.war svg{color:var(--brick)}
+.warscore>.body{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center}
+.warscore .side{display:flex;align-items:center;gap:12px}
+.warscore .side.right{text-align:right}
+.warscore .big{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.warscore .mid{text-align:center}
+.warscore .bar{height:10px;border-radius:5px;background:var(--brick);overflow:hidden}
+.warscore .bar i{display:block;height:100%;background:var(--seaglass)}
+.crewmark.enemy{color:var(--brick)}
+@media (max-width:560px){.warscore>.body{grid-template-columns:1fr 1fr}.warscore .mid{grid-column:1/-1;order:3}.warscore .crewmark.lg{min-width:48px;height:48px;font-size:15px}.warscore .big{font-size:26px}}

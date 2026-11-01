@@ -7,6 +7,7 @@ import {HOMES} from "../src/game/homes.js";
 import {CAREERS,CAREER_STEPS,VEHICLES,MEDALS} from "../src/game/life.js";
 import {MISSIONS} from "../src/game/missions.js";
 import {SEASONS} from "../src/game/seasons.js";
+import {COMPANIES,COMPANY_STARS} from "../src/game/companies.js";
 const q=s=>s==null?"null":"'"+String(s).replace(/'/g,"''")+"'";
 const arr=a=>"array["+a.map(q).join(",")+"]::text[]";
 const MAP={energy:"stamina",happy:"mood",life:"health",nerve:"grit"};
@@ -30,7 +31,7 @@ out+="insert into game.foes(id,name,district,lvl,power,cash_min,cash_max,xp,loot
 // Food, consumables and mystery boxes never run out.
 const BANDS=[[1500,12000],[300,2500],[40,400],[5,60],[1,10]];
 const seeded=id=>{let h=2166136261;for(const ch of id){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return ((h>>>0)%100000)/100000};
-const supplyOf=it=>{if(it.supply)return it.supply;if(it.id==="founder")return 100;if(["use","food","box"].includes(it.cat))return null;
+const supplyOf=it=>{if(it.unlimited)return null;if(it.supply)return it.supply;if(it.id==="founder")return 100;if(["use","food","box"].includes(it.cat))return null;
   const [lo,hi]=BANDS[it.r],u=seeded(it.id);return Math.max(1,Math.round(Math.exp(Math.log(lo)+u*(Math.log(hi)-Math.log(lo)))))};
 const rows=CAT.map(it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"},${q(it.season||null)})`);
 for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season) values\n"+rows.slice(i,i+250).join(",\n")+
@@ -82,6 +83,13 @@ on conflict (chain,step) do update set chain_name=excluded.chain_name,who=exclud
 insert into game.seasons(id,name,blurb,from_m,from_d,to_m,to_d,points,icon) values
 `+SEASONS.map(e=>`(${q(e.id)},${q(e.n)},${q(e.blurb)},${e.from[0]},${e.from[1]},${e.to[0]},${e.to[1]},${q(JSON.stringify(e.points))}::jsonb,${q(e.icon)})`).join(",\n")+`
 on conflict (id) do update set name=excluded.name,blurb=excluded.blurb,from_m=excluded.from_m,from_d=excluded.from_d,to_m=excluded.to_m,to_d=excluded.to_d,points=excluded.points,icon=excluded.icon;
+`;
+out+=`
+-- Companies players can start: ${COMPANIES.length} kinds.
+insert into game.company_types(id,name,cost,lvl,base,perk,max,blurb,sort) values
+`+COMPANIES.map((c,i)=>`(${q(c.id)},${q(c.n)},${c.cost},${c.lvl},${c.base},${q(c.perk)},${c.max},${q(c.blurb)},${i+1})`).join(",\n")+`
+on conflict (id) do update set name=excluded.name,cost=excluded.cost,lvl=excluded.lvl,base=excluded.base,perk=excluded.perk,max=excluded.max,blurb=excluded.blurb,sort=excluded.sort;
+insert into game.company_stars(stars,rep) values ${COMPANY_STARS.map((r,i)=>`(${i+1},${r})`).join(",")} on conflict (stars) do update set rep=excluded.rep;
 `;
 writeFileSync(new URL("../supabase/02_content.sql",import.meta.url),out);
 console.log("wrote",out.length,"bytes");
