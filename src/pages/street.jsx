@@ -8,6 +8,7 @@ import { money, short, num } from "../lib/format.js";
 import { go, DISTRICT_NAMES } from "../lib/nav.js";
 import { jobChance } from "./work.jsx";
 import * as Ic from "../ui/icons.js";
+import { Goals } from "./goals.jsx";
 
 const SCENES = {
   water: ["Rain on the ferry terminal roof. A food cart hisses. Somebody's wallet is sticking out of a back pocket.",
@@ -18,7 +19,10 @@ const SCENES = {
           "The pubs empty out at once. For a minute the lane is all elbows, and then it's quiet again."],
   docks: ["Fog over the container stacks. A crane swings in the dark, and the casino on the pier glows like a fish tank.",
           "Forklift beepers, a ship's horn, and the click of someone trying a padlock that isn't theirs.",
-          "Shift change at the gate. For ten minutes, nobody is watching the yard."]
+          "Shift change at the gate. For ten minutes, nobody is watching the yard."],
+  heights: ["Forty floors up, a party you weren't invited to. Down here, a doorman pretends not to see you.",
+            "Private lifts, tinted windows and a valet who parks cars worth more than a house.",
+            "The towers are lit all night. Somebody up there is always awake, and always rich."]
 };
 
 export const SKILLS = [
@@ -52,6 +56,8 @@ export function Street() {
           </div>
         </div>
       </section>
+
+      <Goals />
 
       <div className="stats">
         <div className="stat"><div className="k">Level {me.level}, {rankOf(me.level)}</div><div className="v">{num(Math.floor(me.xp))} <span className="muted small">/ {num(me.need_xp)} xp</span></div><div className="xpbar"><i style={{ width: xpPct + "%" }} /></div></div>

@@ -5,7 +5,8 @@ import {I,SHP,IT,SKIN,HATS,SHIRTS,BGS,face,rng,hashS} from "./catalog.js";
 export const DISTRICT_ART={
   water:{id:"water",seed:7,sky:["#0b1d2a","#1f5266"],far:"#143341",near:"#0a1820",lamp:"#f0a43a",neon:"#5fd3ff"},
   old:{id:"old",seed:23,sky:["#15122a","#4a2c57"],far:"#272040",near:"#120f1d",lamp:"#f5c96a",neon:"#ff6fc8"},
-  docks:{id:"docks",seed:41,sky:["#1b130e","#5a3218"],far:"#33231a",near:"#120d0a",lamp:"#ff9a3d",neon:"#ffb547"}
+  docks:{id:"docks",seed:41,sky:["#1b130e","#5a3218"],far:"#33231a",near:"#120d0a",lamp:"#ff9a3d",neon:"#ffb547"},
+  heights:{id:"heights",seed:67,sky:["#0f0c24","#3b2d6e"],far:"#1f1a3d",near:"#0b0918",lamp:"#e8e2ff",neon:"#9f8cff"}
 };
 
 export function itemSvg(id,cls="ia"){const it=IT[id];if(!it)return `<svg class="${cls}" viewBox="0 0 48 48"></svg>`;
@@ -16,6 +17,10 @@ export const iconSvg=(name,cls="ia")=>`<svg class="${cls}" viewBox="0 0 48 48" a
 export function portraitSvg(seed){const r=rng(hashS(String(seed||"x")));const pk=a=>a[Math.floor(r()*a.length)];
   return face({skin:pk(SKIN),hat:pk(HATS),shirt:pk(SHIRTS),bg:pk(BGS),shades:r()<.18,glasses:r()<.18,beard:r()<.3,scar:r()<.15,grin:r()<.55,chain:r()<.15,lips:r()<.25})}
 export const npcFaceSvg=f=>face(f);
+// A player's chosen look (indices into the wardrobe lists), drawn the same way as generated faces.
+export const WARDROBE={SKIN,HATS,SHIRTS,BGS};
+export function lookSvg(l){return face({skin:SKIN[l.skin]||SKIN[0],hat:HATS[l.hat]||HATS[0],shirt:SHIRTS[l.shirt]||SHIRTS[0],bg:BGS[l.bg]||BGS[0],
+  shades:!!l.shades,glasses:!!l.glasses,beard:!!l.beard,scar:!!l.scar,grin:!!l.grin,chain:!!l.chain,lips:!!l.lips})}
 
 const skyCache={};
 export function skyline(d){

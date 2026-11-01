@@ -129,7 +129,7 @@ function PlayersHere({ can }) {
   useEffect(() => { load(); }, [me.district]);
   function attack(t) {
     run("attack", { p_target: t.id }, r => { load(); showSheet({ verdict: r.won ? "You won" : "You lost", tone: r.won ? "good" : "bad", title: `You attacked ${r.name}`,
-      story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E`], pic: <Avatar seed={t.id} /> }); });
+      story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E`], pic: <Avatar seed={t.id} look={t.look} /> }); });
   }
   if (!list) return <Panel><Empty title="Looking around…" /></Panel>;
   return (
@@ -137,7 +137,7 @@ function PlayersHere({ can }) {
       {list.length === 0 ? <Empty title="Nobody else is about">Check back later, or try another district.</Empty> :
       <div className="list">{list.map(t => (
         <div key={t.id} className="li">
-          <button className="iconbtn" style={{ border: 0, width: 44, height: 44, padding: 0, background: "none" }} onClick={() => go("player/" + t.id)} aria-label={`View ${t.name}`}><Avatar seed={t.id} /></button>
+          <button className="iconbtn" style={{ border: 0, width: 44, height: 44, padding: 0, background: "none" }} onClick={() => go("player/" + t.id)} aria-label={`View ${t.name}`}><Avatar seed={t.id} look={t.look} /></button>
           <div><button className="t" style={{ background: "none", border: 0, padding: 0, font: "inherit", fontWeight: 650 }} onClick={() => go("player/" + t.id)}>{t.name}</button>
             <div className="s">Level {t.level}, {t.wins} wins, looks <span className={HINT[t.power_hint]}>{t.power_hint}</span></div></div>
           <div className="act">{t.protected ? <span className="pill">New in town</span> : <button className="btn sm danger" disabled={busy || !can || me.level < 3} onClick={() => attack(t)}>Attack</button>}</div>

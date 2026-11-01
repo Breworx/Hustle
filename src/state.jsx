@@ -13,6 +13,7 @@ export const useGame = () => useContext(Ctx);
 export function GameProvider({ session, children }) {
   const [state, setState] = useState(null);
   const [needsChar, setNeedsChar] = useState(false);
+  const [banned, setBanned] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -27,7 +28,12 @@ export function GameProvider({ session, children }) {
 
   const refresh = useCallback(async () => {
     try { const s = await call("get_state"); setState(s); setNeedsChar(false); }
-    catch (e) { if (String(e.message).includes("NO_PLAYER")) setNeedsChar(true); else toast(e.message, "bad"); }
+    catch (e) {
+      const m = String(e.message);
+      if (m.includes("NO_PLAYER")) setNeedsChar(true);
+      else if (m.includes("BANNED|")) { const [, reason, until] = m.slice(m.indexOf("BANNED|")).split("|"); setBanned({ reason, until }); }
+      else toast(e.message, "bad");
+    }
   }, [toast]);
 
   useEffect(() => { refresh(); const t = setInterval(refresh, 15000); return () => clearInterval(t); }, [refresh]);
@@ -55,7 +61,7 @@ export function GameProvider({ session, children }) {
 
   const inv = useMemo(() => Object.fromEntries((state?.inventory || []).map(x => [x.item_id, x.qty])), [state]);
   const holdings = useMemo(() => Object.fromEntries((state?.holdings || []).map(x => [x.ticker, x])), [state]);
-  const value = { state, me: state?.me, inv, holdings, refresh, run, toast, showSheet: setSheet, busy, needsChar, session, uid };
+  const value = { banned, state, me: state?.me, inv, holdings, refresh, run, toast, showSheet: setSheet, busy, needsChar, session, uid };
 
   return (
     <Ctx.Provider value={value}>

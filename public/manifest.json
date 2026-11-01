@@ -1,1 +1,14 @@
-{"name":"Backstreet","short_name":"Backstreet","start_url":"/","display":"standalone","background_color":"#0e1a1f","theme_color":"#0e1a1f","icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{
+  "name": "Backstreet",
+  "short_name": "Backstreet",
+  "description": "A multiplayer crime game set in a rain-soaked harbour city.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e1a1f",
+  "theme_color": "#0e1a1f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

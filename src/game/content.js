@@ -3,7 +3,8 @@ import {SKIN} from "./catalog.js";
 const DISTRICTS=[
  {id:"water",n:"Waterfront",lvl:1,fare:30,seed:7,sky:["#f4c84a","#e06a2a"],far:"#8a2a1c",near:"#1b1714",lamp:"#f2c23a",neon:"#4fe3ff",weather:"rain",blurb:"Ferries, food carts and tourists with fat wallets."},
  {id:"old",n:"Old Town",lvl:4,fare:80,seed:23,sky:["#f0b84a","#b0386a"],far:"#5a1c3a",near:"#1b1714",lamp:"#f5c96a",neon:"#ff5fc8",weather:"rain",blurb:"Pawn shops, call centres and narrow brick lanes."},
- {id:"docks",n:"The Docks",lvl:8,fare:150,seed:41,sky:["#e8b21f","#c3301f"],far:"#6a2410",near:"#1b1714",lamp:"#f2c23a",neon:"#ffb547",weather:"fog",blurb:"Containers, cranes and the casino on the pier."}
+ {id:"docks",n:"The Docks",lvl:8,fare:150,seed:41,sky:["#e8b21f","#c3301f"],far:"#6a2410",near:"#1b1714",lamp:"#f2c23a",neon:"#ffb547",weather:"fog",blurb:"Containers, cranes and the casino on the pier."},
+ {id:"heights",n:"The Heights",lvl:15,fare:300,seed:67,sky:["#d9c7f0","#3a2a6a"],far:"#2a1f4a",near:"#120e22",lamp:"#e8e2ff",neon:"#9f8cff",weather:"clear",blurb:"Glass towers, private lifts and money that never touches the ground."}
 ];
 const CRIMES=[
  {id:"bins",d:"any",n:"Rummage through bins",nv:1,base:92,min:0,max:12,lvl:1,xp:1,ic:"bin"},
@@ -16,9 +17,12 @@ const CRIMES=[
  {id:"pawn",d:"old",n:"Fence jewellery at the pawn shop",nv:7,base:44,min:300,max:950,lvl:6,xp:11,ic:"diamond"},
  {id:"ware",d:"docks",n:"Warehouse job",nv:10,base:36,min:1000,max:3200,lvl:8,xp:18,ic:"crate"},
  {id:"smug",d:"docks",n:"Smuggle a container",nv:12,base:30,min:2500,max:7000,lvl:10,xp:24,ic:"boat"},
- {id:"vault",d:"docks",n:"Crack the casino vault",nv:15,base:22,min:5000,max:16000,lvl:12,xp:30,ic:"vault"}
+ {id:"vault",d:"docks",n:"Crack the casino vault",nv:15,base:22,min:5000,max:16000,lvl:12,xp:30,ic:"vault"},
+ {id:"party",d:"heights",n:"Work a penthouse party",nv:12,base:34,min:4000,max:11000,lvl:15,xp:28,ic:"mask"},
+ {id:"armour",d:"heights",n:"Hijack an armoured van",nv:16,base:24,min:9000,max:26000,lvl:17,xp:38,ic:"van"},
+ {id:"insider",d:"heights",n:"Sell an insider tip",nv:18,base:20,min:15000,max:45000,lvl:20,xp:50,ic:"chart"}
 ];
-const CRIME_LOOT={bins:["junk","food","plush","card","stamp"],shop:["food","use","junk","card"],pick:["junk","jewel","stamp","card"],tag:["junk","record","comic"],snk:["armour","junk","elec"],ute:["weapon","elec","junk","food"],scam:["elec","card"],pawn:["jewel","coin","figure","record"],ware:["elec","weapon","box","armour"],smug:["collect","box","fossil","figure"],vault:["coin","jewel","collect","fossil"]};
+const CRIME_LOOT={bins:["junk","food","plush","card","stamp"],shop:["food","use","junk","card"],pick:["junk","jewel","stamp","card"],tag:["junk","record","comic"],snk:["armour","junk","elec"],ute:["weapon","elec","junk","food"],scam:["elec","card"],pawn:["jewel","coin","figure","record"],ware:["elec","weapon","box","armour"],smug:["collect","box","fossil","figure"],vault:["coin","jewel","collect","fossil"],party:["jewel","elec","figure","record"],armour:["coin","weapon","armour","box"],insider:["collect","coin","jewel","fossil"]};
 const FOES=[
  {d:"water",n:"Corner kid",p:20,cash:[20,90],xp:8,lvl:1,skin:SKIN[2],hat:"cap",shirt:"#d97bb3",bg:"#1c5568",grin:1,loot:["junk","plush","card","food"]},
  {d:"water",n:"Nightclub bouncer",p:90,cash:[80,300],xp:18,lvl:2,skin:SKIN[3],hat:"bald",shirt:"#111",bg:"#12313f",shades:1,loot:["armour","use","food"]},
@@ -26,6 +30,8 @@ const FOES=[
  {d:"old",n:"Bikie enforcer",p:700,cash:[700,2200],xp:70,lvl:6,skin:SKIN[4],hat:"bandana",shirt:"#222",bg:"#2b1d36",beard:1,loot:["weapon","armour"]},
  {d:"docks",n:"Dock boss",p:1800,cash:[2000,6000],xp:140,lvl:9,skin:SKIN[1],hat:"beanie",shirt:"#f2a33a",bg:"#7a3a14",beard:1,scar:1,loot:["collect","box","fossil"]},
  {d:"docks",n:"The Kingpin",p:5000,cash:[8000,25000],xp:300,lvl:13,skin:SKIN[5],hat:"fedora",shirt:"#3a1414",bg:"#3a2014",chain:1,shades:1,grin:1,loot:["jewel","coin","collect","fossil"]}
+ ,{d:"heights",n:"Private security",p:9000,cash:[10000,30000],xp:420,lvl:15,skin:SKIN[1],hat:"headset",shirt:"#111",bg:"#2a1f4a",shades:1,loot:["armour","weapon","elec"]}
+ ,{d:"heights",n:"The Developer",p:20000,cash:[25000,80000],xp:700,lvl:19,skin:SKIN[2],hat:"slick",shirt:"#e8e2ff",bg:"#3a2a6a",grin:1,chain:1,loot:["collect","jewel","coin","fossil"]}
 ];
 
 /* ---------- item catalogue ---------- */
@@ -73,7 +79,19 @@ smug:{s:["Container 947 slips through customs with its paperwork 'in order'. You
 vault:{s:["Three dials, two guards, one perfect night. The vault door swings open and you walk out with {cash}.","{npc} the pit boss owes you a favour. He looks the other way for exactly four minutes. {cash}.","You crack the vault by listening to the tumblers through a doctor's stethoscope. {cash}, and the stethoscope back where you found it."],
  f:["The vault has a new time lock. It opens in eleven hours. You don't have eleven hours.","Someone wins big on roulette and every camera swings toward the floor. You bail."],
  j:["The head of security, {npc}, was waiting inside the vault. She'd expected you for a week.","Every door in the casino locks at once. The only way out is past six guards and a very large man called {npc2}."],
- h:["The guards catch you in the car park and you learn how hard casino carpet really is."]}
+ h:["The guards catch you in the car park and you learn how hard casino carpet really is."]},
+party:{s:["Black tie, borrowed invitation, and a coat check nobody is watching. You leave with {cash} in other people's pockets.","{npc} the caterer lets you carry trays. Between canapés you lift {cash} in watches and wallets."],
+ f:["The host recognises you from the Docks. You're shown the lift, politely, by two very large men.","Every bag in the cloakroom is chained to the rail. Classy and careful."],
+ j:["Plain-clothes officer {npc} was a guest. She enjoyed the canapés and enjoyed arresting you more."],
+ h:["You slip on a marble staircase that cost more than your life. The ambulance takes its time."]},
+armour:{s:["A fake roadworks sign, a nervous driver and four very heavy bags. {cash}, and not a shot fired.","{npc} on the inside left the back door unlocked at 3:12. By 3:15 you're {cash} richer."],
+ f:["The van takes a different route today. You spend an hour staring at an empty road.","The driver hits the panic button before you're out of the car. You abort."],
+ j:["Armed response arrives in ninety seconds. You're face down on the motorway by minute two."],
+ h:["The guard had a stun baton and opinions. You wake up in A&E."]},
+insider:{s:["A whisper about a merger, sold to the right man in the right bar. He pays {cash} in cash, and you never met.","{npc} at the brokerage buys your tip for {cash}. By Friday the shares have doubled and you're a ghost."],
+ f:["Your tip turns out to be yesterday's news. Your buyer laughs you out of the club.","The deal falls through before you can sell the story. Nobody wants it now."],
+ j:["Your buyer was wearing a wire. Financial crimes officer {npc} has been waiting months for this."],
+ h:["The man whose secret you sold sends two friends to explain how he feels about it."]}
 };
 const BUSTSTORY={s:["You phone in a noise complaint two streets away. While the duty sergeant is on the call, you walk {npc} out the back door. They slip you {cash}.","A borrowed key, a squeaky gate and a very quiet corridor. {npc} is free and presses {cash} into your hand."],
  f:["The cell door creaks. Loudly. You leave {npc} where they are.","{npc} won't stop talking. You give up before the guard notices."],

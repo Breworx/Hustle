@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { IT, RAR, CATN } from "../game/catalog.js";
-import { itemSvg, portraitSvg } from "../game/art.js";
+import { itemSvg, portraitSvg, lookSvg } from "../game/art.js";
 import { clock, oddsColor } from "../lib/format.js";
 import { scarceLabel } from "../lib/supply.js";
 
@@ -15,7 +15,13 @@ export const Scarce = ({ s }) => { const l = scarceLabel(s); return l ? <span cl
 export const itemName = id => (IT[id] ? IT[id].n : id);
 export const itemCat = id => (IT[id] ? CATN[IT[id].cat] : "");
 
-export const Avatar = ({ seed, lg, className = "" }) => <Svg className={`av ${lg ? "lg" : ""} ${className}`} svg={portraitSvg(seed)} />;
+export const Avatar = ({ seed, look, lg, xl, className = "" }) => <Svg className={`av ${lg ? "lg" : ""} ${xl ? "xl" : ""} ${className}`} svg={look ? lookSvg(look) : portraitSvg(seed)} />;
+
+// A player's name, in their chosen colour, with their crew tag.
+export const NAME_COLORS = { gold: "Gold", ember: "Ember", seaglass: "Seaglass", sky: "Sky", violet: "Violet", rose: "Rose" };
+export const Name = ({ p, tag = true }) => (
+  <span className="pname">{tag && (p.crew?.tag || p.crew_tag) ? <span className="ctag">{p.crew?.tag || p.crew_tag}</span> : null}<span className={p.name_color ? "nc-" + p.name_color : ""}>{p.name}</span></span>
+);
 
 export function Meter({ label, value, max, color, note }) {
   const w = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));

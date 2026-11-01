@@ -1,6 +1,6 @@
 # Backstreet
 
-A multiplayer crime game set in a rain-soaked harbour city. Pull jobs, train, fight locals and other players, spring friends from the cells, trade 1,000 collectible items on a player market, and invest in eighteen companies whose prices follow real ones.
+A multiplayer crime game set in a rain-soaked harbour city. Pull jobs across four districts, train, fight locals and other players, run a crew, spring friends from the cells, collect and trade 1,000 limited items on a player market, buy your way up from a bedsit to an island estate, and invest in eighteen companies whose prices follow real ones.
 
 Built with React and Vite, on Supabase (database, sign-in and live updates), hosted on Vercel.
 
@@ -10,6 +10,12 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 - **Live updates.** Chat messages and notifications (you were attacked, your item sold) arrive instantly through Supabase Realtime, with polling as a fallback.
 - **Limited items.** Every collectible has a fixed number of copies that will ever exist, from a few thousand for common junk down to a single copy for the rarest. Each drop is like pulling one copy out of a bag holding every copy left, so scarce items are very hard to find and get harder as they're found. Once all copies are out, the only way to get one is from another player. Food, consumables and mystery boxes never run out. The first 100 characters each get a numbered Founder's key.
 - **Tokens.** The premium currency. Players buy them through Stripe, or buy and sell them with each other on the market for game cash, so nobody has to pay to get them. They're spent on once-a-day refills and 30-day Regular status (faster regen). Limited items and mystery boxes are never sold for real money. Tokens only enter the game when Stripe confirms a payment, and each payment can only be counted once.
+- **Crews.** Players start or join crews (up to 25 members) with a private crew chat, a shared vault, officers, and respect earned from fights won against outsiders. Crews have their own rankings.
+- **People.** Private messages, a contacts list, profiles with chosen looks, taglines, name colours and skyline backdrops.
+- **Every day.** A daily reward with a 7-day streak, three daily goals (all three earn a mystery box and a token), and a first-steps guide that pays new players for learning the ropes.
+- **Homes.** Six places to live, from a bedsit to an island estate. Better homes raise your mood and stamina limits.
+- **Collection log.** Every item a player has ever owned, with progress by category.
+- **Fair play.** New characters can't use the market for their first day, Founder's keys can't be sold, crewmates can't attack each other, chat and messages are rate-limited, players can report messages, and admins can ban, mute, delete messages and adjust accounts. Every admin action is logged.
 - **Real stock moves.** `supabase/03_stock_feed.sql` fetches each real company's close after the US market shuts and moves its game twin by the same percentage.
 
 ## Set it up (about 15 minutes, all doable on an iPad)
@@ -26,8 +32,9 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 
 Go to **Authentication → Sign In / Providers → Email**.
 
-- For a quick start, switch **Confirm email** off so new players can play straight away.
-- If you leave it on, Supabase's built-in email only sends a few messages an hour. For a public launch, add your own email provider under **Authentication → Emails → SMTP settings**.
+- **While you're testing with friends,** you can switch **Confirm email** off so new players can play straight away.
+- **Before a public launch,** switch it back on. Confirmed emails make it much harder for one person to make lots of accounts. Supabase's built-in email only sends a few messages an hour, so add your own email provider under **Authentication → Emails → SMTP settings** (Resend and Postmark both have free tiers).
+- **Optional bot check:** create a free Cloudflare Turnstile widget at dash.cloudflare.com (Turnstile, then Add widget, with your Vercel address as the domain). Put its **secret key** in Supabase: in **Authentication**, find **Bot and Abuse Protection**, switch on **Enable CAPTCHA protection** and choose Turnstile. Then put its **site key** in Vercel as `VITE_TURNSTILE_SITE_KEY` and redeploy. Do both halves, or sign-in will fail.
 
 Then go to **Authentication → URL Configuration** and set **Site URL** to your Vercel address once you have it (step 3).
 
@@ -39,7 +46,21 @@ Then go to **Authentication → URL Configuration** and set **Site URL** to your
    - `VITE_SUPABASE_ANON_KEY`: the `anon` `public` key (never the `service_role` key)
 3. Tap **Deploy**. When it's done, open the address, create an account and pick a street name.
 
-### 4. Switch on payments (when you're ready to take money)
+### 4. Make yourself an admin
+
+Create your character in the game first. Then in the Supabase **SQL Editor**, run this with your street name:
+
+```sql
+update game.players set is_admin = true where name = 'YourName';
+```
+
+Reload the game and an **Admin** link appears at the bottom of the menu. From there you can see sign-ups and revenue, search players, ban or mute them, give or take cash, tokens and items, deal with reported messages, and make other people admins.
+
+### 5. Install it on your iPad
+
+Open the game in Safari, tap **Share**, then **Add to Home Screen**. It opens full screen like an app, with its own icon. Players can do the same on any phone.
+
+### 6. Switch on payments (when you're ready to take money)
 
 The game runs fine without this. The Buy buttons just say payments aren't switched on yet.
 

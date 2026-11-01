@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-export const DISTRICT_NAMES = { water: "Waterfront", old: "Old Town", docks: "The Docks" };
+export const DISTRICT_NAMES = { water: "Waterfront", old: "Old Town", docks: "The Docks", heights: "The Heights" };
 export const go = path => { location.hash = "/" + path; };
 export function useRoute() {
   const get = () => (location.hash.replace(/^#\/?/, "") || "street");

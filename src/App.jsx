@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase, configured, call } from "./lib/supabase.js";
 import { GameProvider, useGame } from "./state.jsx";
-import { Avatar, Countdown, Meter, Svg, ItemThumb } from "./ui/ui.jsx";
+import { Avatar, Countdown, Meter, Svg, ItemThumb, Name } from "./ui/ui.jsx";
 import { skyline, DISTRICT_ART } from "./game/art.js";
 import { rankOf } from "./game/catalog.js";
 import { money } from "./lib/format.js";
@@ -14,11 +14,15 @@ import { Exchange } from "./pages/exchange.jsx";
 import { Tokens } from "./pages/tokens.jsx";
 import { Legal } from "./pages/legal.jsx";
 import { CityMap, Players, Profile, Cells, AandE, Chat, Rankings, News, Account } from "./pages/city.jsx";
+import { Crews, CrewPage, Messages } from "./pages/social.jsx";
+import { Home, Collection } from "./pages/home.jsx";
+import { Admin } from "./pages/admin.jsx";
 
 export const NAV = [
-  { group: "On the street", items: [["street", "The Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["gym", "Gym", Ic.Dumbbell]] },
-  { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
-  { group: "The city", items: [["map", "Map", Ic.Map], ["players", "Players", Ic.Users], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse], ["chat", "Chat", Ic.MessageSquare], ["ranks", "Rankings", Ic.Trophy]] }
+  { group: "On the street", items: [["street", "The Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["gym", "Gym", Ic.Dumbbell], ["home", "Home", Ic.Building]] },
+  { group: "Money", items: [["stash", "Stash", Ic.Package], ["collection", "Collection", Ic.Gem], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
+  { group: "People", items: [["crews", "Crews", Ic.Flag], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
+  { group: "The city", items: [["map", "Map", Ic.Map], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
 ];
 const TABS = [["street", "Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["market", "Market", Ic.Store]];
 
@@ -52,14 +56,38 @@ function SetupNeeded() {
   );
 }
 
+// Optional bot check on sign-up and sign-in (Cloudflare Turnstile), switched on by VITE_TURNSTILE_SITE_KEY.
+// Pair it with Supabase: Authentication, Bot and Abuse Protection, Enable CAPTCHA protection.
+function useCaptcha() {
+  const site = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  const ref = React.useRef(null); const wid = React.useRef(null);
+  const [token, setToken] = useState("");
+  useEffect(() => {
+    if (!site) return;
+    const draw = () => { if (ref.current && window.turnstile && wid.current == null)
+      wid.current = window.turnstile.render(ref.current, { sitekey: site, theme: "auto", callback: setToken, "expired-callback": () => setToken(""), "error-callback": () => setToken("") }); };
+    if (window.turnstile) draw();
+    else if (!document.getElementById("ts-script")) {
+      const sc = document.createElement("script"); sc.id = "ts-script"; sc.async = true;
+      sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; sc.onload = draw; document.head.appendChild(sc);
+    } else document.getElementById("ts-script").addEventListener("load", draw);
+    return () => { if (wid.current != null && window.turnstile) { window.turnstile.remove(wid.current); wid.current = null; } };
+  }, [site]);
+  return { on: !!site, token, ref, reset: () => { setToken(""); if (wid.current != null && window.turnstile) window.turnstile.reset(wid.current); } };
+}
+
 function Auth() {
   const [mode, setMode] = useState("in");
   const [email, setEmail] = useState(""); const [pw, setPw] = useState("");
   const [err, setErr] = useState(""); const [note, setNote] = useState(""); const [busy, setBusy] = useState(false);
+  const captcha = useCaptcha();
   async function submit(e) {
-    e.preventDefault(); setErr(""); setNote(""); setBusy(true);
-    const f = mode === "in" ? supabase.auth.signInWithPassword({ email, password: pw }) : supabase.auth.signUp({ email, password: pw });
-    const { data, error } = await f; setBusy(false);
+    e.preventDefault(); setErr(""); setNote("");
+    if (captcha.on && !captcha.token) return setErr("Tick the box to show you're a person.");
+    setBusy(true);
+    const options = captcha.on ? { captchaToken: captcha.token } : undefined;
+    const f = mode === "in" ? supabase.auth.signInWithPassword({ email, password: pw, options }) : supabase.auth.signUp({ email, password: pw, options });
+    const { data, error } = await f; setBusy(false); captcha.reset();
     if (error) return setErr(error.message);
     if (mode === "up" && !data.session) setNote("Check your email to confirm your account, then sign in.");
   }
@@ -73,6 +101,7 @@ function Auth() {
         <h2>{mode === "in" ? "Sign in" : "Create your account"}</h2>
         <label className="field">Email<input className="input" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
         <label className="field">Password<input className="input" type="password" autoComplete={mode === "in" ? "current-password" : "new-password"} minLength={6} required value={pw} onChange={e => setPw(e.target.value)} /></label>
+        {captcha.on && <div ref={captcha.ref} className="captcha" />}
         {err && <p className="err">{err}</p>}
         {note && <p className="good">{note}</p>}
         <p className="tiny">By playing you agree to the <a href="#/legal">terms and privacy policy</a>.</p>
@@ -106,13 +135,28 @@ function CreateCharacter() {
 }
 
 function Gate() {
-  const { state, needsChar } = useGame();
+  const { state, needsChar, banned } = useGame();
+  if (banned) return <Banned b={banned} />;
   if (needsChar) return <CreateCharacter />;
   if (!state) return <Loading />;
   return <Shell />;
 }
 
-const PAGES = { tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+function Banned({ b }) {
+  const forever = !b.until || b.until.startsWith("infinity");
+  return (
+    <div className="content" style={{ margin: "12vh auto", maxWidth: 560 }}>
+      <div className="panel"><div className="body stack">
+        <h1>Your account is suspended</h1>
+        <p className="muted">{forever ? "This suspension is permanent." : `It lifts on ${new Date(b.until).toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "short" })}.`}{b.reason ? ` Reason: ${b.reason}.` : ""}</p>
+        <p className="muted small">If you think this is a mistake, contact us using the details on the <a href="#/legal">terms page</a>.</p>
+        <div><button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button></div>
+      </div></div>
+    </div>
+  );
+}
+
+const PAGES = { home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
@@ -135,12 +179,13 @@ function Shell() {
             <h4>{g.group}</h4>
             {g.items.map(([k, label, Icon]) => (
               <button key={k} className="navlink" aria-current={base === k ? "page" : undefined} onClick={() => go(k)}>
-                <Icon />{label}{badge(k, me, inv)}
+                <Icon />{label}{badge(k, me, inv, state)}
               </button>
             ))}
           </div>
         ))}
         <div className="railfoot">
+          {me.is_admin && <button className="navlink" aria-current={base === "admin" ? "page" : undefined} onClick={() => go("admin")}><Ic.ShieldCheck />Admin</button>}
           <button className="navlink" aria-current={base === "account" ? "page" : undefined} onClick={() => go("account")}><Ic.User />Account</button>
         </div>
       </nav>
@@ -153,13 +198,16 @@ function Shell() {
       </div>
       <nav className="tabbar" aria-label="Main">
         {TABS.map(([k, l, Icon]) => <button key={k} aria-current={base === k ? "page" : undefined} onClick={() => go(k)}><Icon />{l}</button>)}
-        <button onClick={() => setOpen(true)} aria-label="All places"><Ic.Menu />More{state.unseen > 0 && <span className="count">{state.unseen}</span>}</button>
+        <button onClick={() => setOpen(true)} aria-label="All places"><Ic.Menu />More{(state.unseen + state.unread_dms + state.goals_ready) > 0 && <span className="count">{state.unseen + state.unread_dms + state.goals_ready}</span>}</button>
       </nav>
     </div>
   );
 }
 
-function badge(k, me, inv) {
+function badge(k, me, inv, state) {
+  if (k === "street" && state.goals_ready) return <span className="count">{state.goals_ready}</span>;
+  if (k === "messages" && state.unread_dms) return <span className="count">{state.unread_dms}</span>;
+  if (k === "crews" && state.crew?.apps) return <span className="count">{state.crew.apps}</span>;
   if (k === "tokens" && inv.token) return <span className="count quiet">{inv.token}</span>;
   if (k === "cells" && me.status === "jail") return <span className="count">You</span>;
   if (k === "ae" && me.status === "hosp") return <span className="count">You</span>;
@@ -178,8 +226,8 @@ function Topbar({ onMenu }) {
     <header className="topbar">
       <div className="topbar-in">
         <button className="who" onClick={() => go("player/" + me.id)}>
-          <Avatar seed={me.id} />
-          <span><b>{me.name}</b><span>{rankOf(me.level)}, level {me.level}</span></span>
+          <Avatar seed={me.id} look={me.look} />
+          <span><b><Name p={{ ...me, crew_tag: state.crew?.tag }} /></b><span className="sub">{rankOf(me.level)}, level {me.level}</span></span>
         </button>
         <div className="purse"><b>{money(me.cash)}</b><span>{DISTRICT_NAMES[me.district]}</span></div>
         <div className="meters">

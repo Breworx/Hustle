@@ -27,7 +27,7 @@ export function Stash() {
   const kinds = (state.inventory || []).length;
   return (
     <div className="page">
-      <div className="pagehead"><div><h1>Stash</h1><p>{kinds} of {Object.keys(IT).length} items collected, worth about {money(total)} at book value.</p></div></div>
+      <div className="pagehead"><div><h1>Stash</h1><p>{kinds} items in your stash, worth about {money(total)} at book value.</p></div></div>
       <div className="row" style={{ flexWrap: "wrap" }}>
         <div className="chips">{FILT.map(([k, l]) => <button key={k} className="chip" aria-pressed={f === k} onClick={() => setF(k)}>{l}</button>)}</div>
         <input className="input" style={{ maxWidth: 240, marginLeft: "auto" }} placeholder="Search your stash" value={q} onChange={e => setQ(e.target.value)} aria-label="Search your stash" />
