@@ -141,25 +141,10 @@ create table if not exists game.admin_log(id bigint generated always as identity
   at timestamptz not null default now());
 create table if not exists game.properties(id text primary key, name text not null, price bigint not null, mood int not null, stamina int not null, lvl int not null,
   blurb text not null, sort int not null);
--- Homes: from a doorway to Backstreet Tower. Each step raises your mood and stamina limits and brings its own perks.
--- Perk keys: regen (stamina and health come back faster, or slower if negative), heat (cools faster), mug (muggers take less),
--- hosp (shorter A&E stays), listings (extra market listings), travel_disc, travel_free, travel_fast, daily (a free thing each day).
+-- Homes: from a doorway to a penthouse on the Moon. Each step raises your mood and stamina limits and brings its own perks
+-- (see src/game/homes.js for what each perk key does).
 alter table game.properties add column if not exists perks jsonb not null default '{}'::jsonb;
-delete from game.properties where id not in ('rough','tent','van','bedsit','flat','townhouse','apartment','penthouse','mansion','estate','yacht','tower');
-insert into game.properties(id, name, price, mood, stamina, lvl, blurb, sort, perks) values
-  ('rough', 'A doorway behind the fish market', 0, 0, 0, 1, 'Cardboard, a sleeping bag that was never quite dry, and seagulls with opinions.', 1, '{"regen":-0.25}'),
-  ('tent', 'A tent under the motorway', 500, 50, 0, 1, 'Keeps the rain off. Mostly. The traffic noise is free.', 2, '{}'),
-  ('van', 'A campervan with one working door', 4000, 100, 0, 2, 'Home is wherever you park it, until the council tows it.', 3, '{"travel_disc":0.5}'),
-  ('bedsit', 'Bedsit above the dairy', 15000, 150, 5, 3, 'One room, one window, one neighbour who practises the trumpet. The dairy owner leaves you a pie.', 4, '{"regen":0.05,"daily":{"item":"pie","qty":2}}'),
-  ('flat', 'Flat on the Waterfront', 45000, 250, 10, 4, 'Two rooms and a view of the ferry terminal, if you lean out. And a lock.', 5, '{"regen":0.05,"mug":0.2,"daily":{"item":"lager","qty":1}}'),
-  ('townhouse', 'Old Town townhouse', 150000, 400, 15, 6, 'Brick walls, a proper kitchen and a first-aid cupboard that is actually stocked.', 6, '{"regen":0.1,"mug":0.25,"hosp":0.15,"daily":{"item":"med","qty":1}}'),
-  ('apartment', 'Harbour apartment', 600000, 600, 25, 9, 'Floor-to-ceiling glass, a gym downstairs and a doorman who knows your name.', 7, '{"regen":0.1,"mug":0.3,"hosp":0.15,"heat":0.15,"listings":5,"daily":{"item":"drink","qty":1}}'),
-  ('penthouse', 'Heights penthouse', 2500000, 900, 40, 13, 'The top floor. Private lift, roof terrace, and a doorman who forgets faces for a fee.', 8, '{"regen":0.15,"mug":0.35,"hosp":0.2,"heat":0.25,"listings":5,"daily":{"item":"drink","qty":2}}'),
-  ('mansion', 'Clifftop mansion', 8000000, 1300, 55, 16, 'Twelve bedrooms, a wine cellar, a panic room, and staff who never ask questions.', 9, '{"regen":0.2,"mug":0.5,"hosp":0.25,"heat":0.3,"listings":10,"daily":{"item":"smallbox","qty":1}}'),
-  ('estate', 'Island estate', 25000000, 1800, 70, 20, 'Your own island in the harbour, with a jetty, a helipad and a boat that takes you anywhere for free.', 10, '{"regen":0.2,"mug":0.55,"hosp":0.3,"heat":0.35,"listings":10,"travel_free":true,"daily":{"item":"smallbox","qty":1,"cash":10000}}'),
-  ('yacht', 'The superyacht Nightjar', 80000000, 2400, 85, 24, 'Ninety metres of polished teak with a submarine in the garage. You can be anywhere in the city in seconds.', 11, '{"regen":0.25,"mug":0.65,"hosp":0.35,"heat":0.4,"listings":15,"travel_free":true,"travel_fast":true,"daily":{"item":"crate","qty":1,"cash":20000}}'),
-  ('tower', 'Backstreet Tower', 250000000, 3200, 100, 28, 'Sixty floors of glass in the middle of the skyline, with your name lit up on the top. Forty floors of tenants pay you rent.', 12, '{"regen":0.3,"mug":0.75,"hosp":0.4,"heat":0.5,"listings":20,"travel_free":true,"travel_fast":true,"skyline":true,"daily":{"item":"safebox","qty":1,"cash":50000}}')
-on conflict (id) do update set name = excluded.name, price = excluded.price, mood = excluded.mood, stamina = excluded.stamina, lvl = excluded.lvl, blurb = excluded.blurb, sort = excluded.sort, perks = excluded.perks;
+-- The homes themselves are listed in src/game/homes.js and loaded by 02_content.sql.
 
 
 -- Every item a player has ever owned, for the collection log.
@@ -186,13 +171,58 @@ alter table game.players add column if not exists daily jsonb not null default '
 alter table game.players add column if not exists property text not null default 'rough';
 alter table game.players alter column property set default 'rough';
 alter table game.players add column if not exists home_at timestamptz;
-update game.players set property = 'rough' where property not in (select id from game.properties);
--- Mood and stamina limits are the base for your level plus what your home adds.
-update game.players p set max_mood = 250 + (p.level / 3) * 25 + h.mood, max_stamina = 100 + h.stamina from game.properties h where h.id = p.property;
--- A home's perk value for a player (0 if the home doesn't have it).
+-- ---------- careers, vehicles, medals, missions, seasons, turf ----------
+-- The lists themselves are loaded by 02_content.sql from the files in src/game.
+create table if not exists game.careers(id text primary key, name text not null, perk text not null, max numeric not null, wage int not null,
+  blurb text not null, ranks text[] not null, sort int not null);
+create table if not exists game.career_ranks(rank int primary key, shifts int not null, lvl int not null);
+create table if not exists game.vehicles(id text primary key, name text not null, price bigint not null, lvl int not null, blurb text not null,
+  sort int not null, perks jsonb not null default '{}'::jsonb);
+create table if not exists game.medals(id text primary key, stat text not null, at numeric not null, name text not null, what text not null,
+  tier int not null, tiers int not null, sort int not null);
+create table if not exists game.medals_earned(player_id uuid not null references game.players(id) on delete cascade, medal_id text not null,
+  at timestamptz not null default now(), primary key (player_id, medal_id));
+create table if not exists game.missions(chain text not null, step int not null, chain_name text not null, who text not null, lvl int not null,
+  blurb text not null, title text not null, story text not null, done_text text not null, k text not null, n numeric not null,
+  reward jsonb not null, sort int not null, primary key (chain, step));
+create table if not exists game.seasons(id text primary key, name text not null, blurb text not null, from_m int not null, from_d int not null,
+  to_m int not null, to_d int not null, points jsonb not null, icon text not null default 'Sparkles');
+create table if not exists game.season_points(season text not null, year int not null, player_id uuid not null references game.players(id) on delete cascade,
+  points numeric not null default 0, primary key (season, year, player_id));
+create table if not exists game.season_claims(season text not null, year int not null, player_id uuid not null references game.players(id) on delete cascade,
+  at timestamptz not null default now(), primary key (season, year, player_id));
+-- Crew influence in each district. Control goes to the crew with the most influence over the last seven days.
+create table if not exists game.turf(id bigint generated always as identity primary key, district text not null, crew_id bigint not null references game.crews(id) on delete cascade,
+  pts numeric not null, at timestamptz not null default now());
+create index if not exists turf_recent on game.turf (district, at desc);
+alter table game.items add column if not exists season text;
+alter table game.players add column if not exists career text;
+alter table game.players add column if not exists career_rank int not null default 0;
+alter table game.players add column if not exists career_shifts int not null default 0;
+alter table game.players add column if not exists career_at timestamptz;
+alter table game.players add column if not exists vehicle text not null default 'foot';
+alter table game.players add column if not exists title text;
+alter table game.players add column if not exists best_streak int not null default 0;
+alter table game.players add column if not exists mission jsonb not null default '{}'::jsonb;
+alter table game.players add column if not exists missions_done int not null default 0;
+alter table game.players add column if not exists chains_done text[] not null default '{}';
+do $$ declare t text; begin
+  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf'] loop
+    execute format('alter table game.%I enable row level security', t);
+    execute format('revoke all on game.%I from public', t);
+  end loop;
+end $$;
+
+create or replace function game.pval(j jsonb) returns numeric language sql immutable as $$
+  select case jsonb_typeof(j) when 'number' then (j #>> '{}')::numeric when 'boolean' then case when (j #>> '{}')::boolean then 1 else 0 end else 0 end $$;
+
+-- A player's total perk from their home, vehicle and career, capped so nothing becomes free or instant by stacking.
 create or replace function game.hperk(pid uuid, k text) returns numeric language sql stable as $$
-  select coalesce(case jsonb_typeof(h.perks->k) when 'number' then (h.perks->>k)::numeric when 'boolean' then case when (h.perks->>k)::boolean then 1 else 0 end else 0 end, 0)
-  from game.players p join game.properties h on h.id = p.property where p.id = pid $$;
+  select case k when 'mug' then least(0.9, t) when 'hosp' then least(0.6, t) when 'jail' then least(0.6, t) when 'travel_disc' then least(1, t)
+                when 'travel_time' then least(0.9, t) when 'heat' then least(1.5, t) when 'travel_free' then least(1, t) when 'travel_fast' then least(1, t) else t end
+  from (select coalesce((select game.pval(h.perks->k) from game.players p join game.properties h on h.id = p.property where p.id = pid), 0)
+             + coalesce((select game.pval(v.perks->k) from game.players p join game.vehicles v on v.id = p.vehicle where p.id = pid), 0)
+             + coalesce((select c.max * p.career_rank / 10.0 from game.players p join game.careers c on c.id = p.career where p.id = pid and c.perk = k), 0) t) x $$;
 alter table game.messages add column if not exists channel text not null default 'city';
 create index if not exists messages_channel on game.messages (channel, id desc);
 
@@ -323,7 +353,7 @@ begin
 end $$;
 
 create or replace function game.dboost(d text) returns numeric language sql immutable as
-$$ select case d when 'old' then 0.25 when 'docks' then 0.5 when 'heights' then 0.8 else 0 end $$;
+$$ select case d when 'old' then 0.25 when 'docks' then 0.5 when 'heights' then 0.8 when 'airport' then 1.0 when 'island' then 1.3 else 0 end $$;
 
 create or replace function game.has_block(pid uuid, tk text) returns boolean language sql stable as $$
   select exists (select 1 from game.holdings h join game.stocks s using (ticker)
@@ -371,7 +401,7 @@ begin
     tries := tries + 1; r := random(); pick := null;
     with wt as (select id, power(1 + boost, rarity) * coalesce(supply - minted, (array[6000,1200,200,30,5])[rarity + 1]) as w
                 from game.items
-                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token') and (supply is null or minted < supply)),
+                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token') and season is null and (supply is null or minted < supply)),
          cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
     select id into pick from cum where cw >= r * tw order by cw limit 1;
     if pick is not null then
@@ -405,7 +435,7 @@ create or replace function game.card(p game.players) returns jsonb language sql 
   select jsonb_build_object('id', p.id, 'name', p.name, 'level', p.level, 'district', p.district,
     'status', game.status(p), 'last_seen', p.last_seen, 'wins', p.wins, 'losses', p.losses,
     'created_at', p.created_at, 'founder', p.founder, 'regular', coalesce(p.regular_until > now(), false),
-    'look', p.look, 'name_color', p.name_color, 'backdrop', p.backdrop, 'tagline', p.tagline,
+    'look', p.look, 'name_color', p.name_color, 'backdrop', p.backdrop, 'tagline', p.tagline, 'title', p.title,
     'crew', (select jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag) from game.crews c where c.id = p.crew_id),
     'protected', (p.level < 3 or p.created_at > now() - interval '1 day')) $$;
 
@@ -442,6 +472,7 @@ language plpgsql security definer set search_path = game, public as $$
 declare p game.players;
 begin
   p := game.me();
+  perform game.medal_check(p.id);
   return jsonb_build_object(
     'me', to_jsonb(p) || jsonb_build_object('status', game.status(p), 'power', round(game.power(p)),
           'networth', game.networth(p.id), 'need_xp', round(100 * power(p.level, 1.5)),
@@ -455,8 +486,11 @@ begin
              'apps', case when p.crew_role in ('leader', 'officer') then (select count(*) from game.crew_apps a where a.crew_id = c.id) else 0 end)
              from game.crews c where c.id = p.crew_id),
     'goals_ready', game.goals_ready(p.id),
+    'season', (select jsonb_build_object('id', s.id, 'name', s.name, 'icon', s.icon) from game.seasons s where s.id = game.season_now()),
+    'mission_ready', (select (p.mission->>'have')::numeric >= m.n from game.missions m where m.chain = p.mission->>'chain' and m.step = (p.mission->>'step')::int),
+    'shift_ready', p.career is not null and (p.career_at is null or p.career_at < now() - interval '20 hours'),
     'home_ready', (select (h.perks ? 'daily') and (p.home_at is null or p.home_at < now() - interval '20 hours') from game.properties h where h.id = p.property),
-    'tower', (select jsonb_agg(name order by name) from (select name from game.players where property = 'tower' limit 5) x),
+    'tower', (select jsonb_agg(name) from (select x.name from game.players x join game.properties h on h.id = x.property where h.perks ? 'skyline' order by h.sort desc, x.name limit 5) x),
     'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes'),
     'server_time', now());
 end $$;
@@ -475,7 +509,7 @@ end $$;
 -- ---------- jobs ----------
 create or replace function public.do_job(p_job text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players; j game.jobs; ch numeric; g bigint := 0; loot text; outcome text; secs int := 0; r numeric;
+declare p game.players; j game.jobs; ch numeric; g bigint := 0; loot text; outcome text; secs int := 0; r numeric; ev text;
 begin
   p := game.me(); perform game.need_free(p);
   select * into j from game.jobs where id = p_job;
@@ -484,7 +518,8 @@ begin
   if j.district <> 'any' and j.district <> p.district then raise exception 'That job is in another district.'; end if;
   if p.grit < j.grit then raise exception 'Not enough grit. It comes back with time.'; end if;
   ch := least(96, greatest(5, j.base + sqrt(p.crime_xp) * 2.2 + case when p.luck > 0 then 10 else 0 end
-        + least(25, (game.skill_lvl(p.skills, 'thief') - 1) * 0.5) + case when game.has_block(p.id, 'GRCH') then 3 else 0 end - p.heat * 0.25));
+        + least(25, (game.skill_lvl(p.skills, 'thief') - 1) * 0.5) + case when game.has_block(p.id, 'GRCH') then 3 else 0 end + game.hperk(p.id, 'job')
+        + case when p.crew_id is not null and game.turf_owner(p.district) = p.crew_id then 3 else 0 end - p.heat * 0.25));
   update game.players set grit = grit - j.grit, jobs_done = jobs_done + 1, luck = greatest(0, luck - 1) where id = p.id;
   if random() * 100 < ch then
     g := floor(j.cash_min + random() * (j.cash_max - j.cash_min + 1));
@@ -495,12 +530,17 @@ begin
     update game.players set cash = cash + g, crime_xp = crime_xp + j.xp, heat = least(100, heat + j.grit * 1.4) where id = p.id;
     perform game.gain_xp(p.id, j.xp); perform game.add_skill(p.id, 'thief', j.xp * 2);
     perform game.track(p.id, 'jobcash', g);
+    perform game.track(p.id, 'job:' || j.id, 1);
+    perform game.turf_add(p.id, p.district, j.grit);
+    -- The crew that runs this district takes a 3% cut of every job done here (it doesn't come out of your pay).
+    update game.crews set vault = vault + floor(g * 0.03) where id = game.turf_owner(p.district);
+    ev := game.event_drop(p.id);
     outcome := 'win';
   else
     update game.players set heat = least(100, heat + case when j.id = 'bins' then 1 else j.grit * 3 end) where id = p.id;
     r := random();
     if r < (case when j.id = 'bins' then 0.06 else 0.45 end) then
-      secs := round((60 + j.grit * 30) * (0.7 + random() * 0.6) * case when p.heat >= 75 then 2 else 1 end);
+      secs := round((60 + j.grit * 30) * (0.7 + random() * 0.6) * case when p.heat >= 75 then 2 else 1 end * (1 - game.hperk(p.id, 'jail')));
       update game.players set jail_until = now() + make_interval(secs => secs), jail_reason = 'Caught: ' || lower(j.name) where id = p.id;
       outcome := 'jail';
     elsif r < (case when j.id = 'bins' then 0.16 else 0.62 end) then
@@ -514,7 +554,7 @@ begin
     end if;
   end if;
   perform game.track(p.id, 'job', 1);
-  return jsonb_build_object('outcome', outcome, 'cash', g, 'item', loot, 'secs', secs, 'xp', case when outcome = 'win' then j.xp else 0 end, 'chance', round(ch));
+  return jsonb_build_object('outcome', outcome, 'cash', g, 'item', loot, 'item2', ev, 'secs', secs, 'xp', case when outcome = 'win' then j.xp else 0 end, 'chance', round(ch));
 end $$;
 
 -- ---------- gym ----------
@@ -531,7 +571,7 @@ begin
     g := g + (1.2 + random() * 1.6) * (0.6 + mood / 500.0) * (1 + p.level * 0.04);
     mood := greatest(0, mood - 2);
   end loop;
-  g := g * (1 + (game.skill_lvl(p.skills, 'fit') - 1) / 100.0) * case when game.has_block(p.id, 'CHPW') then 1.05 else 1 end;
+  g := g * (1 + (game.skill_lvl(p.skills, 'fit') - 1) / 100.0) * (1 + game.hperk(p.id, 'gym')) * case when game.has_block(p.id, 'CHPW') then 1.05 else 1 end;
   execute format('update game.players set %I = %I + $1, stamina = stamina - $2, mood = $3 where id = $4', p_stat, p_stat)
     using g, n * 5, mood, p.id;
   perform game.gain_xp(p.id, ceil(n / 2.0)); perform game.add_skill(p.id, 'fit', n);
@@ -542,7 +582,7 @@ end $$;
 -- ---------- fights against city NPCs ----------
 create or replace function public.fight_npc(p_foe text) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players; f game.foes; pw numeric; ch numeric; g bigint := 0; loot text; secs int := 0; lost bigint := 0;
+declare p game.players; f game.foes; pw numeric; ch numeric; g bigint := 0; loot text; secs int := 0; lost bigint := 0; ev text;
 begin
   p := game.me(); perform game.need_free(p);
   select * into f from game.foes where id = p_foe;
@@ -560,8 +600,10 @@ begin
     update game.players set cash = cash + g, wins = wins + 1, health = greatest(1, health - (5 + floor(random() * 16))),
       heat = least(100, heat + 6) where id = p.id;
     perform game.gain_xp(p.id, f.xp); perform game.add_skill(p.id, 'fight', ceil(f.xp / 2.0));
-    perform game.track(p.id, 'fight_win', 1);
-    return jsonb_build_object('won', true, 'cash', g, 'item', loot, 'xp', f.xp, 'chance', round(ch * 100));
+    perform game.track(p.id, 'fight_win', 1); perform game.track(p.id, 'fight:' || f.id, 1);
+    perform game.turf_add(p.id, p.district, 3);
+    ev := game.event_drop(p.id);
+    return jsonb_build_object('won', true, 'cash', g, 'item', loot, 'item2', ev, 'xp', f.xp, 'chance', round(ch * 100));
   else
     lost := floor(p.cash * 0.1 * (1 - game.hperk(p.id, 'mug'))); secs := round((120 + f.lvl * 20) * (1 - game.hperk(p.id, 'hosp')));
     update game.players set losses = losses + 1, cash = cash - lost, health = greatest(1, health - (40 + floor(random() * 31))),
@@ -604,6 +646,7 @@ begin
     perform game.notify(t.id, 'attacked', format('%s attacked you and took %s. You''re in A&E.', p.name, game.fmt(mug)));
     if p.crew_id is not null then
       update game.crews set respect = respect + 1 + t.level / 4 where id = p.crew_id;
+      perform game.turf_add(p.id, p.district, case when t.crew_id is not null then 10 else 4 end);
     end if;
     perform game.track(p.id, 'fight_win', 1);
     return jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'chance', round(ch * 100));
@@ -655,6 +698,9 @@ begin
     'is_contact', exists (select 1 from game.contacts k where k.player_id = me.id and k.contact = t.id),
     'property', (select name from game.properties where id = t.property),
     'collection', (select count(*) from game.collection where player_id = t.id),
+    'medals', (select count(*) from game.medals_earned where player_id = t.id),
+    'vehicle_name', (select name from game.vehicles where id = t.vehicle),
+    'career_title', (select c.ranks[t.career_rank] || ', ' || lower(c.name) from game.careers c where c.id = t.career),
     'crew_role', t.crew_role,
     'recent', coalesce((select jsonb_agg(jsonb_build_object('at', a.at, 'won', a.attacker_won, 'cash', a.cash,
                  'attacker', (select name from game.players where id = a.attacker), 'defender', (select name from game.players where id = a.defender)) order by a.at desc)
@@ -699,7 +745,7 @@ begin
   else
     update game.players set heat = least(100, heat + 6) where id = p.id;
     if random() < 0.45 then
-      secs := 120 + floor(random() * 180)::int;
+      secs := round((120 + floor(random() * 180)) * (1 - game.hperk(p.id, 'jail')))::int;
       update game.players set jail_until = now() + make_interval(secs => secs), jail_reason = 'Caught springing ' || t.name where id = p.id;
     end if;
     return jsonb_build_object('ok', false, 'name', t.name, 'jailed', secs > 0, 'secs', secs, 'chance', round(ch));
@@ -730,9 +776,9 @@ begin
   if p.level < d.lvl then raise exception '% opens at level %.', d.name, d.lvl; end if;
   fare := case when game.has_block(p.id, 'VOLT') or game.hperk(p.id, 'travel_free') > 0 then 0 else round(d.fare * (1 - game.hperk(p.id, 'travel_disc'))) end;
   if p.cash < fare then raise exception 'The fare is %.', game.fmt(fare); end if;
-  secs := case when game.hperk(p.id, 'travel_fast') > 0 then 5 when game.has_block(p.id, 'TRHD') then 20 else 60 end;
+  secs := case when game.hperk(p.id, 'travel_fast') > 0 then 5 else greatest(5, round((case when game.has_block(p.id, 'TRHD') then 20 else 60 end) * (1 - game.hperk(p.id, 'travel_time')))) end;
   update game.players set cash = cash - fare, travel_to = d.id, travel_until = now() + make_interval(secs => secs) where id = p.id;
-  perform game.track(p.id, 'travel', 1);
+  perform game.track(p.id, 'travel', 1); perform game.track(p.id, 'travel:' || d.id, 1);
   return jsonb_build_object('to', d.id, 'secs', secs, 'fare', fare);
 end $$;
 
@@ -1175,6 +1221,15 @@ begin
     end if;
   end loop;
   if changed then update game.players set daily = d where id = pid; end if;
+  -- Story mission progress
+  update game.players p set mission = jsonb_set(p.mission, '{have}', to_jsonb(least(m.n, (p.mission->>'have')::numeric + track.n)))
+    from game.missions m where p.id = pid and m.chain = p.mission->>'chain' and m.step = (p.mission->>'step')::int and m.k = track.k
+      and (p.mission->>'have')::numeric < m.n;
+  -- Seasonal event points
+  insert into game.season_points(season, year, player_id, points)
+    select s.id, extract(year from game.today())::int, pid, (s.points->>track.k)::numeric * track.n from game.seasons s
+    where s.id = game.season_now() and s.points ? track.k
+    on conflict (season, year, player_id) do update set points = game.season_points.points + excluded.points;
 end $$;
 
 -- How many rewards are waiting to be collected (shown as a badge).
@@ -1218,7 +1273,7 @@ begin
   if p.streak_day = game.today() then raise exception 'You''ve already collected today''s reward. Come back tomorrow.'; end if;
   n := case when p.streak_day = game.today() - 1 then p.streak + 1 else 1 end;
   r := game.streak_reward(n, p.level);
-  update game.players set streak = n, streak_day = game.today(), cash = cash + coalesce((r->>'cash')::bigint, 0) where id = p.id;
+  update game.players set streak = n, best_streak = greatest(best_streak, n), streak_day = game.today(), cash = cash + coalesce((r->>'cash')::bigint, 0) where id = p.id;
   if r ? 'item' then perform game.give(p.id, r->>'item', (r->>'qty')::int); end if;
   return r || jsonb_build_object('streak', n);
 end $$;
@@ -1535,7 +1590,7 @@ begin
   return jsonb_build_object('current', p.property, 'collected_today', p.home_at > now() - interval '20 hours',
     'next_collect', p.home_at + interval '20 hours',
     'homes', (select jsonb_agg(to_jsonb(h) || jsonb_build_object('owners', (select count(*) from game.players x where x.property = h.id),
-                'names', case when h.sort >= 11 then (select jsonb_agg(x.name order by x.name) from (select name from game.players where property = h.id limit 12) x) end) order by sort)
+                'names', case when h.price >= 80000000 then (select jsonb_agg(x.name order by x.name) from (select name from game.players where property = h.id limit 12) x) end) order by sort)
               from game.properties h));
 end $$;
 
@@ -1557,11 +1612,14 @@ begin
     mood = least(mood, 250 + (level / 3) * 25 + nw.mood), stamina = least(stamina, 100 + nw.stamina * 1.5),
     home_at = case when nw.sort > cur.sort then null else home_at end where id = p.id;
   if nw.sort > cur.sort then perform game.track(p.id, 'home', 1); end if;
-  if nw.sort >= 9 and nw.sort > cur.sort then
+  if nw.price >= 8000000 and nw.sort > cur.sort then
     insert into game.messages(player_id, name, body) values (null, 'The Bugle',
       case nw.id when 'tower' then format('%s just bought Backstreet Tower. Their name is going up on the skyline tonight.', p.name)
                  when 'yacht' then format('%s just bought the superyacht Nightjar. Mind the wake.', p.name)
-                 else format('%s just moved into a %s.', p.name, lower(nw.name)) end);
+                 when 'bridge' then format('%s just bought the Harbour Bridge. Yes, the whole thing. Tolls go up tomorrow.', p.name)
+                 when 'moon' then format('%s just bought a penthouse on the Moon. Wave tonight. They can see you.', p.name)
+                 when 'lighthouse' then format('%s just bought the lighthouse island. Every ship now passes under their window.', p.name)
+                 else format('%s just moved into %s.', p.name, case when nw.name ~ '^(A |The )' then lower(left(nw.name, 1)) || substr(nw.name, 2) else 'the ' || lower(nw.name) end) end);
   end if;
   return jsonb_build_object('moved', nw.id, 'paid', net);
 end $$;
@@ -1799,6 +1857,301 @@ begin
 end $$;
 
 
+
+-- =====================================================================
+-- CAREERS, VEHICLES, MEDALS, STORY MISSIONS, SEASONAL EVENTS AND TURF
+-- =====================================================================
+
+-- ---------- turf ----------
+create or replace function game.turf_owner(d text) returns bigint language sql stable as $$
+  select crew_id from game.turf where district = d and at > now() - interval '7 days'
+  group by crew_id having sum(pts) >= 50 order by sum(pts) desc, crew_id limit 1 $$;
+
+create or replace function game.turf_add(pid uuid, d text, n numeric) returns void language sql as $$
+  insert into game.turf(district, crew_id, pts) select d, crew_id, n from game.players where id = pid and crew_id is not null $$;
+
+create or replace function public.turf_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('my_crew', p.crew_id, 'districts', (select jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name,
+      'owner', (select jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag) from game.crews c where c.id = game.turf_owner(d.id)),
+      'standings', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag, 'pts', round(x.s)) order by x.s desc)
+          from (select crew_id, sum(pts) s from game.turf where district = d.id and at > now() - interval '7 days' group by crew_id order by s desc limit 5) x
+          join game.crews c on c.id = x.crew_id), '[]')) order by d.sort) from game.districts d));
+end $$;
+
+-- ---------- seasonal events ----------
+create or replace function game.season_now() returns text language sql stable as $$
+  select id from game.seasons where game.today() between make_date(extract(year from game.today())::int, from_m, from_d)
+                                                      and make_date(extract(year from game.today())::int, to_m, to_d) limit 1 $$;
+
+-- A drop of the running event's items, weighted by how many copies are left.
+create or replace function game.roll_season(s text) returns text language plpgsql as $$
+declare pick text; r numeric := random();
+begin
+  with wt as (select id, (supply - minted)::numeric w from game.items where season = s and supply > minted),
+       cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
+  select id into pick from cum where cw >= r * tw order by cw limit 1;
+  if pick is null then return null; end if;
+  update game.items set minted = minted + 1 where id = pick and minted < supply;
+  if not found then return null; end if;
+  return pick;
+end $$;
+
+-- After a job or fight win: a 1 in 8 chance of an event item while an event is on.
+create or replace function game.event_drop(pid uuid) returns text language plpgsql as $$
+declare s text := game.season_now(); x text;
+begin
+  if s is null or random() > 0.125 then return null; end if;
+  x := game.roll_season(s);
+  if x is not null then perform game.give(pid, x, 1); end if;
+  return x;
+end $$;
+
+create or replace function game.season_end(s game.seasons, y int) returns timestamptz language sql immutable as $$
+  select (make_date(y, s.to_m, s.to_d) + 1)::timestamp at time zone 'Pacific/Auckland' $$;
+
+create or replace function public.season_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; s game.seasons; y int := extract(year from game.today())::int; last game.seasons; ly int; lid text; out jsonb := '{}';
+begin
+  p := game.me();
+  select * into s from game.seasons where id = game.season_now();
+  if found then
+    out := jsonb_build_object('active', to_jsonb(s) || jsonb_build_object('year', y, 'ends_at', game.season_end(s, y),
+      'mine', coalesce((select round(points) from game.season_points where season = s.id and year = y and player_id = p.id), 0),
+      'rank', (select count(*) + 1 from game.season_points x where x.season = s.id and x.year = y and x.points > coalesce((select points from game.season_points where season = s.id and year = y and player_id = p.id), 0)),
+      'top', coalesce((select jsonb_agg(jsonb_build_object('id', pl.id, 'name', pl.name, 'look', pl.look, 'name_color', pl.name_color, 'points', round(x.points)) order by x.points desc)
+               from (select * from game.season_points where season = s.id and year = y order by points desc limit 20) x join game.players pl on pl.id = x.player_id), '[]'),
+      'items', (select jsonb_agg(jsonb_build_object('id', id, 'supply', supply, 'found', minted) order by rarity) from game.items where season = s.id)));
+  end if;
+  -- The most recent event that has finished, and whether you can claim its trophy.
+  select x.id, x.yy into lid, ly from (
+    select se.*, case when make_date(y, se.to_m, se.to_d) < game.today() then y else y - 1 end yy from game.seasons se) x
+    order by make_date(x.yy, x.to_m, x.to_d) desc limit 1;
+  select * into last from game.seasons where id = lid;
+  if last.id is not null and (s.id is null or last.id <> s.id) then
+    out := out || jsonb_build_object('last', jsonb_build_object('id', last.id, 'name', last.name, 'year', ly, 'ended', game.season_end(last, ly),
+      'top', coalesce((select jsonb_agg(jsonb_build_object('id', pl.id, 'name', pl.name, 'points', round(x.points)) order by x.points desc)
+               from (select * from game.season_points where season = last.id and year = ly order by points desc limit 10) x join game.players pl on pl.id = x.player_id), '[]'),
+      'can_claim', game.season_end(last, ly) > now() - interval '60 days'
+         and p.id in (select player_id from game.season_points where season = last.id and year = ly order by points desc limit 10)
+         and not exists (select 1 from game.season_claims where season = last.id and year = ly and player_id = p.id)));
+  end if;
+  return out;
+end $$;
+
+create or replace function public.season_claim(p_season text, p_year int) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; s game.seasons;
+begin
+  p := game.me();
+  select * into s from game.seasons where id = p_season;
+  if not found then raise exception 'Unknown event.'; end if;
+  if game.season_end(s, p_year) > now() then raise exception 'That event hasn''t finished yet.'; end if;
+  if game.season_end(s, p_year) < now() - interval '60 days' then raise exception 'Trophies can be claimed for 60 days after an event ends.'; end if;
+  if p.id not in (select player_id from game.season_points where season = s.id and year = p_year order by points desc limit 10) then
+    raise exception 'Only the top ten can claim a trophy.'; end if;
+  insert into game.season_claims(season, year, player_id) values (s.id, p_year, p.id);
+  update game.items set minted = minted + 1 where id = 'trophy_' || s.id;
+  perform game.give(p.id, 'trophy_' || s.id, 1);
+  return jsonb_build_object('item', 'trophy_' || s.id);
+end $$;
+
+-- ---------- careers ----------
+create or replace function game.career_wage(c game.careers, rank int) returns bigint language sql immutable as $$
+  select (round(c.wage * power(1.45, rank - 1) / 10) * 10)::bigint $$;
+
+create or replace function public.career_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('career', p.career, 'rank', p.career_rank, 'shifts', p.career_shifts,
+    'next_shift', p.career_at + interval '20 hours', 'can_shift', p.career is not null and (p.career_at is null or p.career_at < now() - interval '20 hours'),
+    'steps', (select jsonb_agg(jsonb_build_object('rank', rank, 'shifts', shifts, 'lvl', lvl) order by rank) from game.career_ranks),
+    'careers', (select jsonb_agg(to_jsonb(c) || jsonb_build_object('wages', (select jsonb_agg(game.career_wage(c, r) order by r) from generate_series(1, 10) r)) order by c.sort) from game.careers c));
+end $$;
+
+create or replace function public.career_join(p_id text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.careers;
+begin
+  p := game.me();
+  select * into c from game.careers where id = p_id;
+  if not found then raise exception 'No such career.'; end if;
+  if p.career = c.id then raise exception 'You already work there.'; end if;
+  update game.players set career = c.id, career_rank = 1, career_shifts = 0 where id = p.id;
+  return jsonb_build_object('career', c.id, 'title', c.ranks[1]);
+end $$;
+
+create or replace function public.career_shift() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.careers; w bigint; nr game.career_ranks; promoted boolean := false;
+begin
+  p := game.me(); perform game.need_free(p);
+  if p.career is null then raise exception 'Pick a career first.'; end if;
+  if p.career_at > now() - interval '20 hours' then raise exception 'You''ve already worked today. Next shift in %.', to_char(p.career_at + interval '20 hours' - now(), 'HH24"h "MI"m"'); end if;
+  select * into c from game.careers where id = p.career;
+  w := game.career_wage(c, p.career_rank);
+  update game.players set cash = cash + w, career_shifts = career_shifts + 1, career_at = now() where id = p.id;
+  select * into nr from game.career_ranks where rank = p.career_rank + 1;
+  if found and p.career_shifts + 1 >= nr.shifts and p.level >= nr.lvl then
+    update game.players set career_rank = nr.rank where id = p.id; promoted := true;
+    perform game.notify(p.id, 'level', format('Promoted to %s.', c.ranks[nr.rank]));
+  end if;
+  perform game.gain_xp(p.id, 2 + p.career_rank);
+  perform game.track(p.id, 'shift', 1);
+  return jsonb_build_object('wage', w, 'promoted', promoted, 'title', c.ranks[case when promoted then nr.rank else p.career_rank end]);
+end $$;
+
+-- ---------- vehicles ----------
+create or replace function public.vehicle_list() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('current', p.vehicle, 'vehicles', (select jsonb_agg(to_jsonb(v) order by sort) from game.vehicles v));
+end $$;
+
+create or replace function public.vehicle_buy(p_id text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; cur game.vehicles; nw game.vehicles; net bigint;
+begin
+  p := game.me();
+  select * into cur from game.vehicles where id = p.vehicle;
+  select * into nw from game.vehicles where id = p_id;
+  if not found then raise exception 'No such vehicle.'; end if;
+  if nw.id = cur.id then raise exception 'That''s already yours.'; end if;
+  if p.level < nw.lvl then raise exception 'You need level % for that.', nw.lvl; end if;
+  net := nw.price - floor(coalesce(cur.price, 0) * 0.7);
+  if net > p.cash then raise exception 'That costs % after trading in your current ride. You have % on you.', game.fmt(net), game.fmt(p.cash); end if;
+  update game.players set cash = cash - net, vehicle = nw.id where id = p.id;
+  if nw.sort > coalesce(cur.sort, 0) then perform game.track(p.id, 'vehicle', 1); end if;
+  if nw.price >= 12000000 and nw.sort > coalesce(cur.sort, 0) then
+    insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('Spotted: %s, arriving in %s.', p.name, lower(left(nw.name, 1)) || substr(nw.name, 2)));
+  end if;
+  return jsonb_build_object('bought', nw.id, 'paid', net);
+end $$;
+
+-- ---------- medals ----------
+create or replace function game.player_stats(pid uuid) returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'level', p.level, 'jobs', p.jobs_done, 'wins', p.wins, 'busts', p.busts,
+    'collection', (select count(*) from game.collection where player_id = p.id and item_id <> 'token'),
+    'legendary', (select count(*) from game.collection c join game.items i on i.id = c.item_id where c.player_id = p.id and i.rarity = 4 and i.id not in ('token', 'founder')),
+    'oneofone', (select count(*) from game.collection c join game.items i on i.id = c.item_id where c.player_id = p.id and i.supply = 1),
+    'home', (select sort from game.properties where id = p.property), 'vehicle', (select sort from game.vehicles where id = p.vehicle),
+    'networth', game.networth(p.id), 'streak', greatest(p.best_streak, p.streak),
+    'sales', (select count(*) from game.sales where seller = p.id),
+    'blocks', (select count(*) from game.holdings h join game.stocks s using (ticker) where h.player_id = p.id and h.shares >= s.perk_shares),
+    'thief', game.skill_lvl(p.skills, 'thief'), 'fight', game.skill_lvl(p.skills, 'fight'), 'fit', game.skill_lvl(p.skills, 'fit'), 'trade', game.skill_lvl(p.skills, 'trade'),
+    'missions', p.missions_done, 'career', p.career_rank,
+    'turf', case when p.crew_id is null then 0 else (select count(*) from game.districts d where game.turf_owner(d.id) = p.crew_id) end,
+    'days', floor(extract(epoch from now() - p.created_at) / 86400), 'founder', case when p.founder is not null then 1 else 0 end,
+    'events', coalesce((select sum(points) from game.season_points where player_id = p.id), 0), 'power', round(game.power(p)))
+  from game.players p where p.id = pid $$;
+
+-- Award any medals newly earned, with one notification for the lot.
+create or replace function game.medal_check(pid uuid) returns int language plpgsql as $$
+declare st jsonb := game.player_stats(pid); names text[];
+begin
+  with ins as (insert into game.medals_earned(player_id, medal_id)
+               select pid, m.id from game.medals m where coalesce((st->>m.stat)::numeric, 0) >= m.at
+               on conflict do nothing returning medal_id)
+  select array_agg(m.name order by m.sort) into names from ins join game.medals m on m.id = ins.medal_id;
+  if names is not null then
+    perform game.notify(pid, 'medal', case when array_length(names, 1) = 1 then format('New medal: %s.', names[1])
+                                          else format('%s new medals, including %s.', array_length(names, 1), names[array_length(names, 1)]) end);
+    return array_length(names, 1);
+  end if;
+  return 0;
+end $$;
+
+create or replace function public.medals_state(p_player uuid default null) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; who uuid;
+begin
+  p := game.me(); who := coalesce(p_player, p.id);
+  if who = p.id then perform game.medal_check(p.id); end if;
+  return jsonb_build_object('title', (select title from game.players where id = who), 'stats', game.player_stats(who),
+    'earned', coalesce((select jsonb_object_agg(medal_id, at) from game.medals_earned where player_id = who), '{}'),
+    'medals', (select jsonb_agg(to_jsonb(m) || jsonb_build_object('holders', (select count(*) from game.medals_earned e where e.medal_id = m.id)) order by m.sort) from game.medals m),
+    'players', (select count(*) from game.players));
+end $$;
+
+create or replace function public.title_set(p_medal text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; n text;
+begin
+  p := game.me();
+  if p_medal is null then update game.players set title = null where id = p.id; return jsonb_build_object('title', null); end if;
+  select m.name into n from game.medals m join game.medals_earned e on e.medal_id = m.id and e.player_id = p.id where m.id = p_medal;
+  if n is null then raise exception 'You haven''t earned that one yet.'; end if;
+  update game.players set title = n where id = p.id;
+  return jsonb_build_object('title', n);
+end $$;
+
+-- ---------- story missions ----------
+create or replace function public.missions_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('active', p.mission, 'done', to_jsonb(p.chains_done), 'level', p.level,
+    'chains', (select jsonb_agg(c order by c->>'lvl', c->>'sort') from (
+      select jsonb_build_object('id', chain, 'name', min(chain_name), 'who', min(who), 'lvl', min(lvl), 'blurb', min(blurb), 'sort', min(sort),
+        'steps', jsonb_agg(jsonb_build_object('step', step, 'title', title, 'story', story, 'done_text', done_text, 'k', k, 'n', n, 'reward', reward) order by step)) c
+      from game.missions group by chain) x));
+end $$;
+
+create or replace function public.mission_start(p_chain text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; l int;
+begin
+  p := game.me();
+  select min(lvl) into l from game.missions where chain = p_chain;
+  if l is null then raise exception 'No such story.'; end if;
+  if p.mission ? 'chain' then raise exception 'Finish or drop your current story first.'; end if;
+  if p_chain = any(p.chains_done) then raise exception 'You''ve already finished that story.'; end if;
+  if p.level < l then raise exception 'That story opens at level %.', l; end if;
+  update game.players set mission = jsonb_build_object('chain', p_chain, 'step', 1, 'have', 0) where id = p.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.mission_drop() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me(); update game.players set mission = '{}' where id = p.id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.mission_claim() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; m game.missions; r jsonb; last boolean;
+begin
+  p := game.me();
+  if not (p.mission ? 'chain') then raise exception 'You''re not on a story right now.'; end if;
+  select * into m from game.missions where chain = p.mission->>'chain' and step = (p.mission->>'step')::int;
+  if (p.mission->>'have')::numeric < m.n then raise exception 'Not done yet.'; end if;
+  r := m.reward;
+  update game.players set cash = cash + coalesce((r->>'cash')::bigint, 0), missions_done = missions_done + 1 where id = p.id;
+  if r ? 'item' then perform game.give(p.id, r->>'item', coalesce((r->>'qty')::int, 1)); end if;
+  if r ? 'xp' then perform game.gain_xp(p.id, (r->>'xp')::numeric); end if;
+  last := not exists (select 1 from game.missions where chain = m.chain and step = m.step + 1);
+  if last then
+    update game.players set mission = '{}', chains_done = array_append(chains_done, m.chain) where id = p.id;
+    perform game.notify(p.id, 'mission', format('Story finished: %s.', m.chain_name));
+  else
+    update game.players set mission = jsonb_build_object('chain', m.chain, 'step', m.step + 1, 'have', 0) where id = p.id;
+  end if;
+  return jsonb_build_object('reward', r, 'done_text', m.done_text, 'finished', last, 'title', m.title);
+end $$;
+
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -1808,7 +2161,8 @@ do $$ declare f record; begin
              'bank','chat_send','chat_recent','leaderboard','item_supply','token_info','token_spend',
              'goals_state','checkin','goal_claim','guide_claim','crew_create','crew_list','crew_get','crew_apply','crew_withdraw','crew_decide',
              'crew_leave','crew_member','crew_vault','crew_motto','dm_send','dm_threads','dm_thread','contact_toggle','report',
-             'property_list','property_move','home_collect','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
+             'property_list','property_move','home_collect','turf_state','season_state','season_claim','career_state','career_join','career_shift',
+             'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
              'admin_resolve','admin_delete_message') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;

@@ -17,20 +17,26 @@ const nameBtn = { background: "none", border: 0, padding: 0, font: "inherit", fo
 
 // ---------------- Map ----------------
 export function CityMap() {
-  const { me, holdings, run, busy, toast } = useGame();
-  const free = hasBlock(holdings, "VOLT"), fast = hasBlock(holdings, "TRHD");
+  const { me, state, holdings, run, busy, toast } = useGame();
+  const [turf, setTurf] = useState(null);
+  useEffect(() => { call("turf_state").then(setTurf).catch(() => setTurf({ districts: [] })); }, []);
+  const T = Object.fromEntries((turf?.districts || []).map(t => [t.id, t]));
+  const free = hasBlock(holdings, "VOLT");
   return (
     <div className="page">
-      <div className="pagehead"><div><h1>Map</h1><p>Each district has its own jobs, its own trouble and better loot the further you go. A taxi takes {fast ? "20 seconds" : "a minute"}, and the ride cools your heat a little.</p></div></div>
+      <div className="pagehead"><div><h1>Map and turf</h1><p>Each district has its own jobs, trouble and better loot the further out you go. Crews fight for control: every job and fight a member wins earns their crew influence there. The crew with the most influence over the last seven days runs the district. Its members get +3% job odds there, and its vault takes a 3% cut of every job done there by anyone.</p></div></div>
       <div className="cols">
-        {DISTRICTS.map(d => { const here = me.district === d.id; const locked = me.level < d.lvl; return (
-          <div key={d.id} className="panel">
-            <div className="mini-sky" style={{ height: 130, borderRadius: "10px 10px 0 0" }}><Svg svg={skyline(DISTRICT_ART[d.id])} /></div>
+        {DISTRICTS.map(d => { const here = me.district === d.id; const locked = me.level < d.lvl; const t = T[d.id]; const ours = t?.owner && t.owner.id === state.crew?.id; const top = t?.standings?.[0]?.pts || 0; return (
+          <div key={d.id} className={`panel ${ours ? "ourturf" : ""}`}>
+            <div className="mini-sky" style={{ height: 130, borderRadius: "10px 10px 0 0" }}><Svg svg={skyline(DISTRICT_ART[d.id])} />
+              {t?.owner && <span className="turfflag"><span className="crewmark sm">{t.owner.tag}</span>{ours ? "Your crew's turf" : `Run by ${t.owner.name}`}</span>}</div>
             <div className="body stack-sm">
               <div className="row" style={{ justifyContent: "space-between" }}><h2>{d.n}</h2>{here ? <span className="pill good"><Ic.MapPin />You're here</span> : locked ? <span className="pill"><Ic.Lock />Level {d.lvl}</span> : null}</div>
               <p className="muted small">{d.blurb}</p>
-              {!here && <button className="btn" disabled={busy || locked || me.status !== "ok"} onClick={() => run("travel", { p_district: d.id }, r => toast(`Taxi booked to ${d.n}. ${r.fare ? money(r.fare) + " fare." : "Free ride."}`, "good"))}>
-                <Ic.Car />Take a taxi{free ? " (free)" : `, ${money(d.fare)}`}</button>}
+              {t && <div className="stack-sm">{t.standings.length === 0 ? <span className="tiny">No crew has a hold here yet. 50 influence takes it.</span> :
+                t.standings.slice(0, 3).map(c => <div key={c.id} className="turfrow"><span className="small"><b>{c.tag}</b> {c.name}</span><div className="xpbar"><i style={{ width: (c.pts / Math.max(50, top)) * 100 + "%", background: c.id === state.crew?.id ? "var(--seaglass)" : undefined }} /></div><span className="tiny">{num(c.pts)}</span></div>)}</div>}
+              {!here && <button className="btn" disabled={busy || locked || me.status !== "ok"} onClick={() => run("travel", { p_district: d.id }, r => toast(`On your way to ${d.n}. ${r.fare ? money(r.fare) + " fare" : "Free ride"}, ${r.secs} seconds.`, "good"))}>
+                <Ic.Car />Travel{free ? " (free)" : ""}</button>}
             </div>
           </div>); })}
       </div>
@@ -79,7 +85,7 @@ export function Profile({ arg }) {
         {p.backdrop && <div className="backdrop"><Svg svg={skyline(DISTRICT_ART[p.backdrop])} /><div className="fade" /></div>}
         <div className="body row" style={{ gap: 18, flexWrap: "wrap", position: "relative" }}>
           <Avatar seed={p.id} look={p.look} xl className={p.regular ? "ring" : ""} />
-          <div className="grow"><h1><Name p={p} tag={false} /></h1>
+          <div className="grow">{p.title && <div className="ptitle">{p.title}</div>}<h1><Name p={p} tag={false} /></h1>
             {p.tagline && <p className="tagline">“{p.tagline}”</p>}
             <p className="muted">Level {p.level}, {rankOf(p.level).toLowerCase()}{p.crew ? <> in <button style={{ ...nameBtn, color: "var(--signal)" }} onClick={() => go("crew/" + p.crew.id)}>{p.crew.name}</button>{p.crew_role === "leader" ? ", which they lead" : ""}</> : ""}. On the street since {new Date(p.created_at).toLocaleDateString("en-NZ", { month: "long", year: "numeric" })}.</p>
             <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span>{p.founder && <span className="pill scarce"><Ic.Sparkles />Founder #{p.founder}</span>}{p.regular && <span className="pill good"><Ic.Star />Regular</span>}<span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
@@ -99,6 +105,9 @@ export function Profile({ arg }) {
         <div className="stat"><div className="k">People sprung</div><div className="v">{num(p.busts)}</div></div>
         <div className="stat"><div className="k">Collection</div><div className="v">{num(p.collection)} <span className="muted small">items</span></div></div>
         <div className="stat"><div className="k">Lives in</div><div className="v" style={{ fontSize: 16 }}>{p.property}</div></div>
+        <div className="stat"><div className="k">Gets around by</div><div className="v" style={{ fontSize: 16 }}>{p.vehicle_name}</div></div>
+        <div className="stat"><div className="k">Day job</div><div className="v" style={{ fontSize: 16 }}>{p.career_title || "None"}</div></div>
+        <button className="stat" style={{ textAlign: "left", border: 0, font: "inherit", color: "inherit", cursor: "pointer" }} onClick={() => go("medals/" + p.id)}><div className="k">Medals</div><div className="v">{num(p.medals)} <span className="muted small">see all</span></div></button>
       </div>
       <Panel title="Recent fights" flush>
         {p.recent.length === 0 ? <Empty title="No fights yet" /> :

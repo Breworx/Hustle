@@ -454,3 +454,29 @@ a.btn{text-decoration:none}
   .rung .act{grid-column:2/-1;justify-self:start}
   .homehero .bigicon{width:72px;height:72px}
 }
+.ladder .stage{padding:16px 16px 6px;font-size:13px;font-weight:700;color:var(--sodium);border-bottom:1px solid var(--rope);background:var(--deck)}
+
+/* Turf, missions, medals, events */
+.turfflag{position:absolute;left:10px;bottom:10px;display:inline-flex;align-items:center;gap:7px;padding:4px 9px 4px 4px;border-radius:999px;background:#071016cc;color:#fff;font-size:12px;font-weight:700}
+.ourturf{border-color:color-mix(in srgb,var(--seaglass) 55%,var(--rope))}
+.turfrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 40px;gap:8px;align-items:center}
+.turfrow .xpbar{margin:0}
+.turfrow .tiny{text-align:right}
+.eventbar{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 16px;border-radius:var(--r-panel);border:1px solid color-mix(in srgb,var(--heather) 50%,transparent);background:color-mix(in srgb,var(--heather) 14%,transparent);color:var(--fog);font-size:14px}
+.eventbar svg{width:20px;height:20px;flex:none;color:var(--heather)}
+.eventbar.quiet{border-color:color-mix(in srgb,var(--sodium) 45%,transparent);background:var(--sodium-soft)}
+.eventbar.quiet svg{color:var(--sodium)}
+.story-card{border-color:color-mix(in srgb,var(--sodium) 40%,var(--rope))}
+.storytext{font-family:var(--story);font-size:18px;line-height:1.6;max-width:65ch}
+.steplist{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.ptitle{font-size:12.5px;font-weight:700;color:var(--sodium);margin-bottom:2px}
+.medals{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.medal{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:9px;border:1px solid var(--rope);background:var(--deck-2);opacity:.6}
+.medal.got{opacity:1;background:var(--deck)}
+.medal .disc{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--deck-3);color:var(--mist)}
+.medal .disc svg{width:20px;height:20px}
+.medal.got.t1 .disc{background:#8a5a3a;color:#fff}
+.medal.got.t2 .disc{background:#9aa4ad;color:#13232a}
+.medal.got.t3 .disc{background:#d9a62a;color:#2a1a00}
+.medal.got.t4 .disc{background:#5cc8a0;color:#06231a}
+.medal.got.t5 .disc{background:linear-gradient(135deg,#f2c14e,#b18be8);color:#1a1030;box-shadow:0 0 12px -2px #f2c14e}

@@ -31,7 +31,7 @@ export function Jobs() {
   function doJob(j) {
     run("do_job", { p_job: j.id }, r => {
       const [verdict, tone] = VERDICT[r.outcome];
-      showSheet({ verdict, tone, title: j.n, story: jobStory(j.id, r), cash: r.cash, items: r.item ? [r.item] : [],
+      showSheet({ verdict, tone, title: j.n, story: jobStory(j.id, r), cash: r.cash, items: [r.item, r.item2].filter(Boolean),
         lines: [r.xp ? `+${r.xp} xp` : null, r.outcome === "jail" ? `${Math.ceil(r.secs / 60)} min in the cells` : null, r.outcome === "hosp" ? `${Math.ceil(r.secs / 60)} min in A&E` : null].filter(Boolean),
         pic: <Svg className="thumb" svg={iconSvg(j.ic)} />, again: r.outcome === "win" || r.outcome === "fail" ? () => doJob(j) : null });
     });
@@ -97,7 +97,7 @@ export function Fights() {
   const can = me.status === "ok" && me.stamina >= 25 && me.health >= me.max_health * 0.3;
   function fight(f) {
     run("fight_npc", { p_foe: slug(f.n) }, r => showSheet({ verdict: r.won ? "You won" : "You lost", tone: r.won ? "good" : "bad", title: f.n,
-      story: npcFightStory(f.n, r), cash: r.won ? r.cash : 0, items: r.item ? [r.item] : [],
+      story: npcFightStory(f.n, r), cash: r.won ? r.cash : 0, items: [r.item, r.item2].filter(Boolean),
       lines: [r.won ? `+${r.xp} xp` : `Lost ${money(r.lost)}`, !r.won ? `${Math.ceil(r.secs / 60)} min in A&E` : null].filter(Boolean),
       pic: <Svg className="av" svg={npcFaceSvg(f)} /> }));
   }

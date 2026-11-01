@@ -4,7 +4,9 @@ const DISTRICTS=[
  {id:"water",n:"Waterfront",lvl:1,fare:30,seed:7,sky:["#f4c84a","#e06a2a"],far:"#8a2a1c",near:"#1b1714",lamp:"#f2c23a",neon:"#4fe3ff",weather:"rain",blurb:"Ferries, food carts and tourists with fat wallets."},
  {id:"old",n:"Old Town",lvl:4,fare:80,seed:23,sky:["#f0b84a","#b0386a"],far:"#5a1c3a",near:"#1b1714",lamp:"#f5c96a",neon:"#ff5fc8",weather:"rain",blurb:"Pawn shops, call centres and narrow brick lanes."},
  {id:"docks",n:"The Docks",lvl:8,fare:150,seed:41,sky:["#e8b21f","#c3301f"],far:"#6a2410",near:"#1b1714",lamp:"#f2c23a",neon:"#ffb547",weather:"fog",blurb:"Containers, cranes and the casino on the pier."},
- {id:"heights",n:"The Heights",lvl:15,fare:300,seed:67,sky:["#d9c7f0","#3a2a6a"],far:"#2a1f4a",near:"#120e22",lamp:"#e8e2ff",neon:"#9f8cff",weather:"clear",blurb:"Glass towers, private lifts and money that never touches the ground."}
+ {id:"heights",n:"The Heights",lvl:15,fare:300,seed:67,sky:["#d9c7f0","#3a2a6a"],far:"#2a1f4a",near:"#120e22",lamp:"#e8e2ff",neon:"#9f8cff",weather:"clear",blurb:"Glass towers, private lifts and money that never touches the ground."},
+ {id:"airport",n:"The Airport",lvl:22,fare:500,seed:83,sky:["#c9e4f0","#1f3a5a"],far:"#1a2c40",near:"#0b1420",lamp:"#bfe3ff",neon:"#6db7e8",weather:"clear",blurb:"Cargo sheds, private hangars and a customs hall that can be talked round."},
+ {id:"island",n:"Casino Island",lvl:30,fare:800,seed:97,sky:["#ffd27a","#6a1f3a"],far:"#3a1424",near:"#14070d",lamp:"#ffd27a",neon:"#ff5fa0",weather:"clear",blurb:"A private island of chandeliers and high rollers, guarded like a mint."}
 ];
 const CRIMES=[
  {id:"bins",d:"any",n:"Rummage through bins",nv:1,base:92,min:0,max:12,lvl:1,xp:1,ic:"bin"},
@@ -20,9 +22,15 @@ const CRIMES=[
  {id:"vault",d:"docks",n:"Crack the casino vault",nv:15,base:22,min:5000,max:16000,lvl:12,xp:30,ic:"vault"},
  {id:"party",d:"heights",n:"Work a penthouse party",nv:12,base:34,min:4000,max:11000,lvl:15,xp:28,ic:"mask"},
  {id:"armour",d:"heights",n:"Hijack an armoured van",nv:16,base:24,min:9000,max:26000,lvl:17,xp:38,ic:"van"},
- {id:"insider",d:"heights",n:"Sell an insider tip",nv:18,base:20,min:15000,max:45000,lvl:20,xp:50,ic:"chart"}
+ {id:"insider",d:"heights",n:"Sell an insider tip",nv:18,base:20,min:15000,max:45000,lvl:20,xp:50,ic:"chart"},
+ {id:"cargo",d:"airport",n:"Swap a cargo pallet",nv:18,base:30,min:20000,max:55000,lvl:22,xp:60,ic:"crate"},
+ {id:"diamonds",d:"airport",n:"Walk diamonds through customs",nv:20,base:24,min:40000,max:110000,lvl:25,xp:80,ic:"diamond"},
+ {id:"jet",d:"airport",n:"Steal a private jet",nv:24,base:18,min:90000,max:240000,lvl:28,xp:110,ic:"plan"},
+ {id:"highroller",d:"island",n:"Rig the high-roller table",nv:22,base:26,min:120000,max:300000,lvl:30,xp:130,ic:"dice"},
+ {id:"gold",d:"island",n:"Empty the gold reserve",nv:26,base:18,min:250000,max:650000,lvl:34,xp:180,ic:"vault"},
+ {id:"bigone",d:"island",n:"The Big One",nv:30,base:12,min:800000,max:2000000,lvl:38,xp:300,ic:"trophy"}
 ];
-const CRIME_LOOT={bins:["junk","food","plush","card","stamp"],shop:["food","use","junk","card"],pick:["junk","jewel","stamp","card"],tag:["junk","record","comic"],snk:["armour","junk","elec"],ute:["weapon","elec","junk","food"],scam:["elec","card"],pawn:["jewel","coin","figure","record"],ware:["elec","weapon","box","armour"],smug:["collect","box","fossil","figure"],vault:["coin","jewel","collect","fossil"],party:["jewel","elec","figure","record"],armour:["coin","weapon","armour","box"],insider:["collect","coin","jewel","fossil"]};
+const CRIME_LOOT={bins:["junk","food","plush","card","stamp"],shop:["food","use","junk","card"],pick:["junk","jewel","stamp","card"],tag:["junk","record","comic"],snk:["armour","junk","elec"],ute:["weapon","elec","junk","food"],scam:["elec","card"],pawn:["jewel","coin","figure","record"],ware:["elec","weapon","box","armour"],smug:["collect","box","fossil","figure"],vault:["coin","jewel","collect","fossil"],party:["jewel","elec","figure","record"],armour:["coin","weapon","armour","box"],insider:["collect","coin","jewel","fossil"],cargo:["elec","box","figure","record"],diamonds:["jewel","coin","collect"],jet:["collect","fossil","box"],highroller:["coin","jewel","card"],gold:["coin","collect","fossil","jewel"],bigone:["collect","fossil","jewel","coin"]};
 const FOES=[
  {d:"water",n:"Corner kid",p:20,cash:[20,90],xp:8,lvl:1,skin:SKIN[2],hat:"cap",shirt:"#d97bb3",bg:"#1c5568",grin:1,loot:["junk","plush","card","food"]},
  {d:"water",n:"Nightclub bouncer",p:90,cash:[80,300],xp:18,lvl:2,skin:SKIN[3],hat:"bald",shirt:"#111",bg:"#12313f",shades:1,loot:["armour","use","food"]},
@@ -32,6 +40,10 @@ const FOES=[
  {d:"docks",n:"The Kingpin",p:5000,cash:[8000,25000],xp:300,lvl:13,skin:SKIN[5],hat:"fedora",shirt:"#3a1414",bg:"#3a2014",chain:1,shades:1,grin:1,loot:["jewel","coin","collect","fossil"]}
  ,{d:"heights",n:"Private security",p:9000,cash:[10000,30000],xp:420,lvl:15,skin:SKIN[1],hat:"headset",shirt:"#111",bg:"#2a1f4a",shades:1,loot:["armour","weapon","elec"]}
  ,{d:"heights",n:"The Developer",p:20000,cash:[25000,80000],xp:700,lvl:19,skin:SKIN[2],hat:"slick",shirt:"#e8e2ff",bg:"#3a2a6a",grin:1,chain:1,loot:["collect","jewel","coin","fossil"]}
+ ,{d:"airport",n:"Customs dog handler",p:40000,cash:[50000,120000],xp:1000,lvl:22,skin:SKIN[4],hat:"cap",shirt:"#1f3a5a",bg:"#1a2c40",loot:["armour","elec","box"]}
+ ,{d:"airport",n:"The Smuggler Queen",p:80000,cash:[120000,300000],xp:1500,lvl:26,skin:SKIN[2],hat:"long",shirt:"#6db7e8",bg:"#1f3a5a",lips:1,shades:1,chain:1,loot:["jewel","collect","coin"]}
+ ,{d:"island",n:"Casino enforcer",p:150000,cash:[200000,500000],xp:2200,lvl:30,skin:SKIN[5],hat:"bald",shirt:"#111",bg:"#3a1424",scar:1,shades:1,loot:["weapon","armour","coin"]}
+ ,{d:"island",n:"The Owner of the Island",p:400000,cash:[600000,1500000],xp:4000,lvl:35,skin:SKIN[0],hat:"fedora",shirt:"#6a1f3a",bg:"#14070d",grin:1,chain:1,loot:["collect","fossil","jewel","coin"]}
 ];
 
 /* ---------- item catalogue ---------- */
@@ -91,7 +103,31 @@ armour:{s:["A fake roadworks sign, a nervous driver and four very heavy bags. {c
 insider:{s:["A whisper about a merger, sold to the right man in the right bar. He pays {cash} in cash, and you never met.","{npc} at the brokerage buys your tip for {cash}. By Friday the shares have doubled and you're a ghost."],
  f:["Your tip turns out to be yesterday's news. Your buyer laughs you out of the club.","The deal falls through before you can sell the story. Nobody wants it now."],
  j:["Your buyer was wearing a wire. Financial crimes officer {npc} has been waiting months for this."],
- h:["The man whose secret you sold sends two friends to explain how he feels about it."]}
+ h:["The man whose secret you sold sends two friends to explain how he feels about it."]},
+cargo:{s:["Two pallets, two labels, one sticker gun. By the time anyone notices, the right goods are on the wrong plane and {cash} is in your account.","{npc} on the forklift owes you one. A pallet of phones goes missing and you're {cash} better off."],
+ f:["The pallet you wanted was loaded an hour early. Wrong plane, wrong country.","Someone has written your pallet's number on a whiteboard in the security office. You walk away."],
+ j:["Airport police officer {npc} has been watching the cargo bays all week. She's very pleased to meet you."],
+ h:["A forklift reverses into you at walking pace. It still breaks two ribs."]},
+diamonds:{s:["You walk through the green lane with $4 million sewn into a jacket lining. Your cut is {cash}.","{npc} at the customs desk waves you through without looking up. {cash} for a very relaxed walk."],
+ f:["The flight is diverted. You spend six hours in a departure lounge with stones in your shoes, then fly home.","A sniffer dog takes an interest in your bag. You abandon it in the toilets."],
+ j:["Customs officer {npc} asks you to step this way. You do not enjoy the next eleven hours."],
+ h:["Your courier contact decides to keep the diamonds and you. It doesn't go well for either of you."]},
+jet:{s:["Ground crew think you're the owner's nephew. You taxi out, take off, and sell the jet in another city for {cash}.","{npc} files a flight plan in your name. Six hours later you're {cash} richer and the jet has a new tail number."],
+ f:["The jet has no fuel. Of course it has no fuel.","Air traffic control asks for a callsign you don't have. You climb back out and walk off quickly."],
+ j:["The jet's real owner is standing on the tarmac with three airport police. Awkward."],
+ h:["You jump from the steps as it starts to roll. Tarmac is very hard."]},
+highroller:{s:["A marked deck, a dealer called {npc}, and a high roller who never stood a chance. {cash} across the felt.","You count the cards for three hours and leave with {cash} and a free room you'll never use."],
+ f:["The pit boss swaps decks halfway through. The rest of the night is just honest gambling, and you lose.","The cameras find your partner's earpiece. You both leave before the security team arrives."],
+ j:["Casino security officer {npc} walks you to a very small room with no windows and calls the police."],
+ h:["The high roller you cleaned out brought friends. They explain the rules of fair play with their fists."]},
+gold:{s:["Down two vaults, through three doors, past one sleeping guard. You carry out {cash} in gold bars.","{npc} on the night shift turns the cameras to face the wall for nine minutes. Long enough for {cash} in gold."],
+ f:["The second vault has a time lock nobody mentioned. You leave empty-handed and very annoyed.","A gold bar is much heavier than you expected. You can't lift it. Nobody can lift it."],
+ j:["The vault door closes behind you. The island's own police open it again at breakfast."],
+ h:["The gold shelf collapses. Gold is heavy. You learn exactly how heavy."]},
+bigone:{s:["Every guard, every camera, every lock. Planned for a year, done in an hour. {cash}, and a story nobody will ever believe.","{npc}, the floor manager, the helicopter pilot and you. The cleanest job in the island's history: {cash}."],
+ f:["Everything goes perfectly until the helicopter doesn't arrive. You swim back to the mainland with nothing.","The island goes into lockdown an hour early. Someone talked."],
+ j:["The Owner was expecting you. Island police, mainland police and a very unimpressed judge."],
+ h:["The Owner's personal guard is waiting at the vault door. You wake up in A&E three days later."]}
 };
 const BUSTSTORY={s:["You phone in a noise complaint two streets away. While the duty sergeant is on the call, you walk {npc} out the back door. They slip you {cash}.","A borrowed key, a squeaky gate and a very quiet corridor. {npc} is free and presses {cash} into your hand."],
  f:["The cell door creaks. Loudly. You leave {npc} where they are.","{npc} won't stop talking. You give up before the guard notices."],

@@ -1,3 +1,4 @@
+import {SEASONS,TROPHIES} from "./seasons.js";
 // Shared game content: item art, the 1,000-item catalogue and portraits.
 // Used by the web app for display and by scripts/gen-sql.mjs to seed the database.
 const I={
@@ -340,7 +341,9 @@ const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx
  // Never drops. Handed to the first 100 people who create a character, numbered in the order they arrived.
  // Bought with real money (or from other players on the market). Spent on refills and Regular status.
  {id:"token",n:"Token",cat:"use",r:2,v:1500,sh:"coin",c:"#f2c14e",c2:"",d:"Backstreet's premium currency. Spend tokens on refills and Regular status, or sell them to other players for cash."},
- {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Backstreet. There will never be another."}];
+ {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Backstreet. There will never be another."},
+ ...SEASONS.flatMap(se=>se.items.map(it=>({cat:"collect",c2:"",fx:undefined,...it,season:se.id}))),
+ ...TROPHIES.map(it=>({cat:"collect",c2:"",fx:undefined,...it}))];
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];
 const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box"]],["junk","Junk",["junk"]]];

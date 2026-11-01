@@ -7,29 +7,17 @@ import { go } from "../lib/nav.js";
 import { CAT, CATN, FILT, RAR, IT } from "../game/catalog.js";
 import { useSupply } from "../lib/supply.js";
 import * as Ic from "../ui/icons.js";
+import { perkList, dailyText } from "../lib/perks.js";
 
 // ---------------- Home ----------------
-export const HOME_ICON = { rough: Ic.DoorOpen, tent: Ic.Tent, van: Ic.Caravan, bedsit: Ic.Bed, flat: Ic.Sofa, townhouse: Ic.House, apartment: Ic.Building,
-  penthouse: Ic.Hotel, mansion: Ic.Castle, estate: Ic.TreePalm, yacht: Ic.Ship, tower: Ic.Building2 };
-const pc = x => Math.round(x * 100) + "%";
-// Plain-language list of what a home does for you.
-export function perkList(h) {
-  const k = h.perks || {}, out = [];
-  if (h.mood) out.push([`+${num(h.mood)} mood limit`, "good"]);
-  if (h.stamina) out.push([`+${h.stamina} stamina limit`, "good"]);
-  if (k.regen < 0) out.push([`Stamina and health ${pc(-k.regen)} slower`, "bad"]);
-  if (k.regen > 0) out.push([`Stamina and health ${pc(k.regen)} faster`, "good"]);
-  if (k.mug) out.push([`Muggers take ${pc(k.mug)} less`, "good"]);
-  if (k.hosp) out.push([`${pc(k.hosp)} shorter A&E stays`, "good"]);
-  if (k.heat) out.push([`Heat cools ${pc(k.heat)} faster`, "good"]);
-  if (k.listings) out.push([`+${k.listings} market listings`, "good"]);
-  if (k.travel_disc) out.push([`Taxis ${pc(k.travel_disc)} off`, "good"]);
-  if (k.travel_free) out.push([k.travel_fast ? "Free travel in 5 seconds" : "Free taxis", "good"]);
-  if (k.daily) out.push([`Every day: ${dailyText(k.daily)}`, "warn"]);
-  if (k.skyline) out.push(["Your name on the skyline", "warn"]);
-  return out;
-}
-export const dailyText = d => [d.item ? `${d.qty > 1 ? d.qty + " × " : ""}${IT[d.item]?.n || d.item}` : null, d.cash ? money(d.cash) : null].filter(Boolean).join(" and ");
+export const HOME_ICON = { rough: Ic.DoorOpen, box: Ic.Package, tent: Ic.Tent, shelter: Ic.BedSingle, caravan: Ic.Caravan, van: Ic.Bus, couch: Ic.Sofa,
+  student: Ic.GraduationCap, bedsit: Ic.Bed, boarding: Ic.DoorClosed, flat: Ic.Armchair, container: Ic.Container, unit: Ic.House, townhouse: Ic.HousePlus,
+  villa: Ic.Trees, houseboat: Ic.Anchor, apartment: Ic.Building, loft: Ic.Warehouse, bungalow: Ic.Mountain, penthouse: Ic.Hotel, gated: Ic.Fence,
+  mansion: Ic.Castle, vineyard: Ic.Grape, estate: Ic.TreePalm, lodge: Ic.MountainSnow, yacht: Ic.Ship, castle: Ic.Crown, tower: Ic.Building2,
+  lighthouse: Ic.Waves, bridge: Ic.Landmark, moon: Ic.Rocket };
+// Groups along the ladder, by position (1-based, inclusive).
+export const HOME_STAGES = [["The street", 1, 6], ["A roof, sort of", 7, 12], ["Moving up", 13, 19], ["Serious money", 20, 25], ["Legend", 26, 31]];
+export { perkList, dailyText };
 
 export function Home() {
   const { me, run, busy, toast, refresh, showSheet } = useGame();
@@ -73,9 +61,10 @@ export function Home() {
         </div>
       </Panel>}
 
-      <Panel title="The ladder" note="From a doorway to the top of the skyline." flush>
-        <ol className="ladder">{d.homes.map((h, i) => { const here = h.id === cur.id, past = i < idx, locked = me.level < h.lvl, net = netFor(h); const Icon = HOME_ICON[h.id] || Ic.House; return (
-          <li key={h.id} className={`rung ${here ? "here" : ""} ${past ? "past" : ""} ${locked ? "locked" : ""}`}>
+      <Panel title="The ladder" note={`${d.homes.length} homes, from a doorway to the Moon. You’re on step ${idx + 1}.`} flush>
+        <ol className="ladder">{d.homes.map((h, i) => { const stage = HOME_STAGES.find(st => st[1] === i + 1); const here = h.id === cur.id, past = i < idx, locked = me.level < h.lvl, net = netFor(h); const Icon = HOME_ICON[h.id] || Ic.House; return (
+          <React.Fragment key={h.id}>{stage && <li className="stage">{stage[0]}</li>}
+          <li className={`rung ${here ? "here" : ""} ${past ? "past" : ""} ${locked ? "locked" : ""}`}>
             <span className="step">{i + 1}</span>
             <span className="thumb homepic"><Icon /></span>
             <div className="grow" style={{ minWidth: 0 }}>
@@ -86,7 +75,7 @@ export function Home() {
             </div>
             <div className="act">{here ? <span className="pill good"><Ic.Check />You live here</span> : locked ? <span className="pill"><Ic.Lock />Level {h.lvl}</span> :
               <button className={`btn sm ${net < 0 ? "ghost" : ""}`} disabled={busy || net > me.cash || me.status !== "ok"} onClick={() => move(h)}>{net >= 0 ? `Move in for ${money(net)}` : `Downsize, get ${money(-net)}`}</button>}</div>
-          </li>); })}</ol>
+          </li></React.Fragment>); })}</ol>
       </Panel>
     </div>
   );

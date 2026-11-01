@@ -22,7 +22,13 @@ const SCENES = {
           "Shift change at the gate. For ten minutes, nobody is watching the yard."],
   heights: ["Forty floors up, a party you weren't invited to. Down here, a doorman pretends not to see you.",
             "Private lifts, tinted windows and a valet who parks cars worth more than a house.",
-            "The towers are lit all night. Somebody up there is always awake, and always rich."]
+            "The towers are lit all night. Somebody up there is always awake, and always rich."],
+  airport: ["Jet engines spooling up in the dark. A cargo door rolls open and nobody is watching it.",
+            "Departures boards flicker over an empty terminal. In the hangars, the real business is just starting.",
+            "A private jet taxis past with its lights off. Somebody is leaving in a hurry."],
+  island: ["Chandeliers, champagne and a sea wall twice as high as it needs to be. The house is expecting company.",
+           "A ferry full of high rollers docks under floodlights. The guards count every one of them.",
+           "Somewhere under all this marble is a vault. Everybody on the island knows it, and nobody talks about it."]
 };
 
 export const SKILLS = [
@@ -58,6 +64,8 @@ export function Street() {
         </div>
       </section>
 
+      {state.season && <button className="eventbar" onClick={() => go("event")}><Ic.PartyPopper /><span className="grow"><b>{state.season.name} is on.</b> Limited items are dropping from jobs and fights, and there's a leaderboard with trophies for the top ten.</span><Ic.ChevronRight /></button>}
+      {state.mission_ready && <button className="eventbar quiet" onClick={() => go("missions")}><Ic.ScrollText /><span className="grow"><b>Your story mission is ready.</b> Go and see what happens next.</span><Ic.ChevronRight /></button>}
       <Goals />
 
       <div className="stats">

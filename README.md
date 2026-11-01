@@ -1,6 +1,6 @@
 # Backstreet
 
-A multiplayer crime game set in a rain-soaked harbour city. Pull jobs across four districts, train, fight locals and other players, run a crew, spring friends from the cells, collect and trade 1,000 limited items on a player market, buy your way up from a bedsit to an island estate, and invest in eighteen companies whose prices follow real ones.
+A multiplayer crime game set in a rain-soaked harbour city. Pull jobs across six districts, train, fight locals and other players, run a crew, spring friends from the cells, collect and trade 1,000 limited items on a player market, climb from sleeping rough in a doorway to a penthouse on the Moon, and invest in eighteen companies whose prices follow real ones.
 
 Built with React and Vite, on Supabase (database, sign-in and live updates), hosted on Vercel.
 
@@ -13,7 +13,13 @@ Built with React and Vite, on Supabase (database, sign-in and live updates), hos
 - **Crews.** Players start or join crews (up to 25 members) with a private crew chat, a shared vault, officers, and respect earned from fights won against outsiders. Crews have their own rankings.
 - **People.** Private messages, a contacts list, profiles with chosen looks, taglines, name colours and skyline backdrops.
 - **Every day.** A daily reward with a 7-day streak, three daily goals (all three earn a mystery box and a token), and a first-steps guide that pays new players for learning the ropes.
-- **Homes.** Six places to live, from a bedsit to an island estate. Better homes raise your mood and stamina limits.
+- **Homes.** 31 steps, from sleeping rough in a doorway to a penthouse on the Moon. Each raises your mood and stamina limits and brings perks: faster healing, mugging protection, shorter A&E stays, cheaper or instant travel, and a free daily item. Everyone starts homeless.
+- **Garage.** 16 rides, from a stolen bike to a private submarine: quicker, cheaper travel and better job odds.
+- **Careers.** Six legitimate day jobs with ten ranks each. Clock in once a day for a wage; promotions make the career's perk stronger.
+- **Story missions.** Eight stories told by recurring characters, 40 missions in all, from Aunty Rose's dairy to The Big One on Casino Island.
+- **Medals.** 126 medals earned automatically as your numbers grow. Wear any one as your title.
+- **Turf.** Crews earn influence in each district from jobs and fights. The crew that runs a district takes a 3% cut of every job done there.
+- **Seasonal events.** Summer Heatwave, Winter Storms, Halloween Night, Fireworks Week and The Christmas Heist, every year, each with limited items and trophies for the top ten.
 - **Collection log.** Every item a player has ever owned, with progress by category.
 - **Fair play.** New characters can't use the market for their first day, Founder's keys can't be sold, crewmates can't attack each other, chat and messages are rate-limited, players can report messages, and admins can ban, mute, delete messages and adjust accounts. Every admin action is logged.
 - **Real stock moves.** `supabase/03_stock_feed.sql` fetches each real company's close after the US market shuts and moves its game twin by the same percentage.
@@ -88,6 +94,10 @@ Pack prices are in NZD and include GST. They're set in the `token_packs` table i
 - Jobs, fighters, districts and stories: `src/game/content.js`
 - Items: `src/game/catalog.js`
 - Companies: `src/game/stocks.js`
+- Homes: `src/game/homes.js`
+- Careers, vehicles and medals: `src/game/life.js`
+- Story missions: `src/game/missions.js`
+- Seasonal events and their items: `src/game/seasons.js`
 
 After changing any of these, run `npm run gen-sql` to rebuild `supabase/02_content.sql`, then run that file in the SQL Editor again. The game rules themselves (odds, payouts, cooldowns) are in `supabase/01_schema.sql`.
 

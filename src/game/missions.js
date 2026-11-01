@@ -1,0 +1,70 @@
+// Story missions: chains told by recurring characters. Take one chain at a time.
+// Objective kinds: job, jobcash, train, fight_win, bust, travel, market, stock, use, home, vehicle, shift, crew,
+// plus job:<job id>, fight:<fighter id> and travel:<district id> for specific ones.
+// Rewards: cash, xp, item (+ qty). Edit, then `npm run gen-sql`.
+export const MISSIONS = [
+  { id: "rose", n: "Aunty Rose's dairy", who: "Aunty Rose", lvl: 1, blurb: "Someone keeps smashing the window of the dairy on the corner. Aunty Rose has fed half the Waterfront at some point, including you.",
+    steps: [
+      { t: "Ears to the ground", s: "\"Third window this month, love.\" Aunty Rose sweeps glass off the step. \"Nobody tells me anything. They'll tell you.\" Do a few jobs around the Waterfront and listen.", k: "job", n: 3, r: { cash: 300, xp: 10 }, d: "Everyone's heard the same thing: a kid on a bike, paid by someone in Old Town." },
+      { t: "The kid on the bike", s: "The corner kid has been flashing new sneakers. Have a quiet word with him.", k: "fight:corner_kid", n: 1, r: { cash: 500, item: "lager", qty: 2 }, d: "He gives up a name before you've finished asking: Mack, who fences out of the pawn shop in Old Town." },
+      { t: "Old Town", s: "Mack doesn't come to the Waterfront. You'll have to go to him.", k: "travel:old", n: 1, r: { cash: 400, xp: 15 }, d: "The pawn shop has Rose's stolen till in the window, priced at $40." },
+      { t: "Mack's muscle", s: "Mack laughs at you and sends out the man who collects his debts.", k: "fight:debt_collector", n: 1, r: { cash: 1500, xp: 40 }, d: "Mack hands back the till, then the money, then an apology he clearly doesn't mean." },
+      { t: "A proper feed", s: "Aunty Rose insists you sit down and eat something before you go anywhere.", k: "use", n: 1, r: { cash: 2000, item: "smallbox", qty: 1, xp: 50 }, d: "\"You're a good one,\" she says, and slides a parcel across the counter. \"Found it in the stockroom. Don't open it here.\"" },
+    ] },
+  { id: "ngata", n: "Mrs Ngata's lodger", who: "Mrs Ngata", lvl: 1, blurb: "The boarding-house landlady has seen a lot of people come in off the street. She thinks you might actually make it.",
+    steps: [
+      { t: "Off the pavement", s: "\"You can't sleep in my doorway forever.\" Mrs Ngata hands you a flyer for a tent sale. Get yourself somewhere to sleep.", k: "home", n: 1, r: { cash: 500, xp: 10 }, d: "It's not much, but it's yours. Mrs Ngata nods once, which from her is a standing ovation." },
+      { t: "A real job", s: "\"Money from jobs comes and goes. Get a wage.\" Pick a career and work a shift.", k: "shift", n: 1, r: { cash: 800, xp: 15 }, d: "Your first payslip. Mrs Ngata pins a copy on her fridge." },
+      { t: "Get strong", s: "\"Half the street will try to take what you've got. Make it hard for them.\" Train at the gym.", k: "train", n: 20, r: { cash: 1000, item: "drink", qty: 2 }, d: "You can feel the difference. So can the next person who tries something." },
+      { t: "Wheels", s: "\"Stop walking everywhere, you look like a tourist.\" Get yourself something with wheels.", k: "vehicle", n: 1, r: { cash: 2000, xp: 40 }, d: "She makes you take her to the supermarket in it. It's the least you can do." },
+      { t: "Moving up", s: "\"Now get out of my sight and get a proper place.\" Climb another two steps up the home ladder.", k: "home", n: 2, r: { cash: 5000, item: "smallbox", qty: 1, xp: 80 }, d: "She hugs you at the door and tells you to visit. You will." },
+    ] },
+  { id: "kerr", n: "Inspector Kerr's offer", who: "Detective Inspector Huia Kerr", lvl: 5, blurb: "A detective with a long memory wants something from you. Saying no doesn't seem to be one of the options.",
+    steps: [
+      { t: "A quiet coffee", s: "Kerr buys you a flat white and slides a folder across the table. \"Bigger fish than you are swimming in this harbour. Help me catch them.\" First, prove you're useful: spring three people from the cells so they owe you.", k: "bust", n: 3, r: { cash: 1500, xp: 40 }, d: "Three grateful ex-prisoners, three new sources. Kerr is pleased." },
+      { t: "Follow the money", s: "\"The phone scams in Old Town all pay into one account.\" Run a phone scam yourself and get inside the operation.", k: "job:scam", n: 2, r: { cash: 3000, xp: 60 }, d: "You find the account details on a sticky note. Criminals are terrible with passwords." },
+      { t: "The bikie problem", s: "\"The account belongs to the bikies. Their enforcer moves the cash.\" Take him off the board.", k: "fight:bikie_enforcer", n: 1, r: { cash: 5000, xp: 90 }, d: "He has a ledger in his jacket. Kerr's hands actually shake when you give it to her." },
+      { t: "Down to the Docks", s: "\"The ledger points to the Docks. I can't go down there without a warrant. You can.\"", k: "travel:docks", n: 1, r: { cash: 3000, xp: 60 }, d: "The container numbers in the ledger match the yard. All of them." },
+      { t: "The dock boss", s: "\"End it.\"", k: "fight:dock_boss", n: 1, r: { cash: 15000, item: "crate", qty: 1, xp: 200 }, d: "Kerr makes the arrests. Your name never appears in the paperwork. \"We're even,\" she says. You both know you're not." },
+    ] },
+  { id: "pete", n: "Old Pete's last voyage", who: "Old Pete, the harbourmaster", lvl: 8, blurb: "The harbourmaster has worked the Docks for forty years and wants one last score before he retires.",
+    steps: [
+      { t: "Heavy lifting", s: "\"I need someone who can carry things and keep their mouth shut.\" Do warehouse jobs in the Docks.", k: "job:ware", n: 3, r: { cash: 6000, xp: 80 }, d: "Pete watches from the crane cab. He likes what he sees." },
+      { t: "Container 947", s: "\"There's a container I've been not-noticing for eleven years. Tonight it moves.\" Smuggle it out.", k: "job:smug", n: 2, r: { cash: 12000, xp: 120 }, d: "Inside: crates of old harbour charts and one locked chest." },
+      { t: "Company", s: "The Kingpin's people have noticed. They want the chest.", k: "fight:the_kingpin", n: 1, r: { cash: 20000, xp: 200 }, d: "The Kingpin limps off, promising this isn't over. Pete laughs until he coughs." },
+      { t: "Sea legs", s: "\"We sail at dawn. Buy something useful at the market for the trip.\"", k: "market", n: 2, r: { cash: 8000, xp: 80 }, d: "Pete approves of nothing you bought, but loads it all anyway." },
+      { t: "The chest", s: "\"Open it.\"", k: "use", n: 1, r: { cash: 40000, item: "safebox", qty: 1, xp: 300 }, d: "Gold sovereigns, a ship's bell and a will leaving everything to whoever helped him open it. Pete retires to the Coromandel. He sends you a postcard every Christmas." },
+    ] },
+  { id: "casino", n: "The house always wins", who: "Sal, the pit boss", lvl: 12, blurb: "The pit boss at the casino on the pier owes the wrong people. He has a plan to pay them back, and it involves you.",
+    steps: [
+      { t: "Learn the floor", s: "\"Watch the tables. Watch the guards. Watch me.\" Pull jobs around the Docks while Sal maps the casino.", k: "job", n: 10, r: { cash: 10000, xp: 100 }, d: "Sal has drawn the whole floor plan on the back of a betting slip." },
+      { t: "Seed money", s: "\"I need a stake to get the high rollers interested.\" Earn it.", k: "jobcash", n: 60000, r: { cash: 15000, xp: 120 }, d: "Sal takes the cash and promises to double it. He actually does, which surprises everyone." },
+      { t: "The security chief", s: "The head of casino security has been asking questions. Make sure she's in A&E on the night.", k: "fight_win", n: 5, r: { cash: 12000, xp: 140 }, d: "Word gets round that you're not someone to cross. Security takes the night off." },
+      { t: "The vault", s: "\"Tonight. Three dials, four minutes.\"", k: "job:vault", n: 3, r: { cash: 50000, item: "crate", qty: 1, xp: 300 }, d: "Sal pays his debts and keeps a little extra. So do you." },
+      { t: "Lie low", s: "\"Spend some money. Look legitimate.\" Buy shares on the exchange.", k: "stock", n: 3, r: { cash: 30000, xp: 200 }, d: "Your stockbroker calls you 'a person of means'. Sal opens a small bar in Old Town." },
+    ] },
+  { id: "developer", n: "The Developer", who: "The Developer", lvl: 15, blurb: "A man in a very good suit is buying up Old Town to knock it down. Aunty Rose's dairy is on his list.",
+    steps: [
+      { t: "Meet the money", s: "The Developer throws a party in the Heights every Friday. Get in.", k: "job:party", n: 3, r: { cash: 30000, xp: 200 }, d: "You overhear the plan: demolition starts next month, Aunty Rose's dairy first." },
+      { t: "His muscle", s: "His private security made Rose cry. Deal with them.", k: "fight:private_security", n: 3, r: { cash: 40000, xp: 260 }, d: "Their radios go quiet. The Developer starts sleeping badly." },
+      { t: "His money", s: "Hit his armoured vans where the rents are collected.", k: "job:armour", n: 3, r: { cash: 60000, xp: 300 }, d: "Two months of rent, gone. His lenders start calling." },
+      { t: "His secret", s: "Sell the city what you know about his deals.", k: "job:insider", n: 2, r: { cash: 80000, xp: 360 }, d: "His share price drops thirty percent before lunch." },
+      { t: "Him", s: "The Developer wants to talk, face to face, in his penthouse. He's brought friends.", k: "fight:the_developer", n: 1, r: { cash: 200000, item: "safebox", qty: 1, xp: 600 }, d: "The demolition is called off. Aunty Rose puts your photo behind the counter, next to the Queen." },
+    ] },
+  { id: "airport", n: "Departures", who: "Marlowe, the cargo agent", lvl: 22, blurb: "A cargo agent at the airport moves things that don't appear on any manifest, and she's short a pair of hands.",
+    steps: [
+      { t: "Arrivals", s: "\"Fly in, look around, don't touch anything.\" Get to the airport.", k: "travel:airport", n: 1, r: { cash: 40000, xp: 300 }, d: "Marlowe meets you at the cargo gate with a lanyard and a hi-vis vest." },
+      { t: "Pallet swap", s: "\"Some pallets need to swap places. Nobody needs to know.\"", k: "job:cargo", n: 4, r: { cash: 80000, xp: 400 }, d: "The pallets go to the wrong planes. On purpose." },
+      { t: "The dog", s: "The customs dog handler has started paying attention to your pallets.", k: "fight:customs_dog_handler", n: 2, r: { cash: 90000, xp: 450 }, d: "The dog is fine. The dog likes you. The handler is less keen." },
+      { t: "Carry-on", s: "\"Diamonds. In the lining of a suitcase. Walk them through customs.\"", k: "job:diamonds", n: 3, r: { cash: 150000, xp: 550 }, d: "You walk straight past three customs officers with $4 million in your luggage." },
+      { t: "The Smuggler Queen", s: "Marlowe's boss wants to meet you. Then she wants you gone.", k: "fight:the_smuggler_queen", n: 1, r: { cash: 400000, item: "safebox", qty: 2, xp: 900 }, d: "Marlowe runs the airport now. Your luggage is never searched again." },
+    ] },
+  { id: "island", n: "The Big One", who: "Nobody, a voice on the phone", lvl: 30, blurb: "Someone who calls themselves Nobody has a plan to rob Casino Island, the most guarded place in the country. They need the best. That's you.",
+    steps: [
+      { t: "The crossing", s: "\"Take the ferry. Bring nothing. Wear something nice.\"", k: "travel:island", n: 1, r: { cash: 150000, xp: 700 }, d: "The island glows like a jewellery box in the dark." },
+      { t: "Rig the table", s: "\"The high-roller table pays for the operation. Make it pay.\"", k: "job:highroller", n: 4, r: { cash: 300000, xp: 900 }, d: "The pit bosses start to sweat. The house is losing." },
+      { t: "The enforcers", s: "\"The casino's enforcers have a list. You're on it.\"", k: "fight:casino_enforcer", n: 3, r: { cash: 300000, xp: 1000 }, d: "The list gets shorter. Your name comes off it." },
+      { t: "The gold", s: "\"Under the casino there's a vault. Under the vault there's another vault.\"", k: "job:gold", n: 2, r: { cash: 700000, xp: 1400 }, d: "Bars of gold, stacked to the ceiling. You take what you can carry, which is a lot." },
+      { t: "The Big One", s: "\"Now the real job. The one they'll make films about.\" The Owner of the Island is waiting.", k: "job:bigone", n: 1, r: { cash: 2000000, item: "safebox", qty: 3, xp: 3000 }, d: "The phone rings one last time. \"Thank you,\" says Nobody, in a voice you've heard every day of your life on the Waterfront. Aunty Rose hangs up before you can say anything." },
+    ] },
+];
