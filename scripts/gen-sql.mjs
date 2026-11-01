@@ -8,6 +8,7 @@ import {CAREERS,CAREER_STEPS,VEHICLES,MEDALS} from "../src/game/life.js";
 import {MISSIONS} from "../src/game/missions.js";
 import {SEASONS} from "../src/game/seasons.js";
 import {COMPANIES,COMPANY_STARS} from "../src/game/companies.js";
+import {SHOP_ARMS,AMMO,lootArms} from "../src/game/arms.js";
 const q=s=>s==null?"null":"'"+String(s).replace(/'/g,"''")+"'";
 const arr=a=>"array["+a.map(q).join(",")+"]::text[]";
 const MAP={energy:"stamina",happy:"mood",life:"health",nerve:"grit"};
@@ -91,6 +92,14 @@ insert into game.company_types(id,name,cost,lvl,base,perk,max,blurb,sort) values
 on conflict (id) do update set name=excluded.name,cost=excluded.cost,lvl=excluded.lvl,base=excluded.base,perk=excluded.perk,max=excluded.max,blurb=excluded.blurb,sort=excluded.sort;
 insert into game.company_stars(stars,rep) values ${COMPANY_STARS.map((r,i)=>`(${i+1},${r})`).join(",")} on conflict (stars) do update set rep=excluded.rep;
 `;
+
+// The armoury: fight stats for every weapon and armour item (shop stock, plus derived stats for loot), and ammo boxes.
+{const shop=Object.fromEntries(SHOP_ARMS.map(a=>[a.id,a]));const nv=v=>v==null?"null":v;
+const rows=CAT.filter(it=>it.cat==="weapon"||it.cat==="armour").map(it=>({id:it.id,...(shop[it.id]||lootArms(it))}))
+ .concat(AMMO.map(a=>({...a,slot:"ammo"})));
+out+="delete from game.arms where item_id not in ("+rows.map(r=>q(r.id)).join(",")+");\n";
+out+="insert into game.arms(item_id,slot,dmg,acc,shots,ammo,weight,lvl,price,box,effect,def) values\n"+rows.map(r=>`(${q(r.id)},${q(r.slot)},${nv(r.dmg)},${nv(r.acc)},${nv(r.shots)},${q(r.ammo)},${r.weight||0},${nv(r.lvl)},${nv(r.price)},${nv(r.box)},${q(r.effect)},${nv(r.def)})`).join(",\n")+
+ "\non conflict (item_id) do update set slot=excluded.slot,dmg=excluded.dmg,acc=excluded.acc,shots=excluded.shots,ammo=excluded.ammo,weight=excluded.weight,lvl=excluded.lvl,price=excluded.price,box=excluded.box,effect=excluded.effect,def=excluded.def;\n";}
 writeFileSync(new URL("../supabase/02_content.sql",import.meta.url),out);
 console.log("wrote",out.length,"bytes");
 const caps=CAT.map(supplyOf).filter(x=>x!=null);console.log("capped items",caps.length,"one-of-ones",caps.filter(x=>x===1).length,"under 10",caps.filter(x=>x<10).length);

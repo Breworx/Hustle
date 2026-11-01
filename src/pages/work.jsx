@@ -9,6 +9,7 @@ import { money, num } from "../lib/format.js";
 import { go, DISTRICT_NAMES } from "../lib/nav.js";
 import { jobStory, npcFightStory, pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
+import { useStartFight } from "./armoury.jsx";
 
 const PERK = Object.fromEntries(STOCKS.map(s => [s.t, s.shares]));
 const hasBlock = (holdings, t) => (holdings[t]?.shares || 0) >= (PERK[t] || 1e12);
@@ -103,7 +104,7 @@ export function Fights() {
   }
   return (
     <div className="page">
-      <div className="pagehead"><div><h1>Fights</h1><p>A fight costs 25 stamina. Win and you take their cash. Lose and you're in A&amp;E. Your power is {num(me.power)}.</p></div>
+      <div className="pagehead"><div><h1>Fights</h1><p>A fight costs 25 stamina. Win and you take their cash. Lose and you're in A&amp;E. Your power is {num(me.power)}. Fights with other players go turn by turn, with whatever you're carrying from the <button className="linkish" onClick={() => go("armoury")}>armoury</button>.</p></div>
         <Seg label="Opponents" value={tab} onChange={setTab} options={[["city", "Locals"], ["players", "Players here"]]} /></div>
       {!can && me.status === "ok" && <p className="tiny">{me.stamina < 25 ? "You need 25 stamina to start a fight." : "You're too beaten up. Heal first."}</p>}
       {tab === "city" ? (
@@ -123,14 +124,10 @@ export function Fights() {
 const HINT = { "much weaker": "good", weaker: "good", even: "warn", stronger: "bad", "much stronger": "bad" };
 
 function PlayersHere({ can }) {
-  const { me, run, showSheet, busy } = useGame();
+  const { me, busy } = useGame(); const startFight = useStartFight();
   const [list, setList] = useState(null);
   const load = () => call("list_players", { p_scope: "here" }).then(setList).catch(() => setList([]));
   useEffect(() => { load(); }, [me.district]);
-  function attack(t) {
-    run("attack", { p_target: t.id }, r => { load(); showSheet({ verdict: r.won ? "You won" : "You lost", tone: r.won ? "good" : "bad", title: `You attacked ${r.name}`,
-      story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E`], pic: <Avatar seed={t.id} look={t.look} /> }); });
-  }
   if (!list) return <Panel><Empty title="Looking around…" /></Panel>;
   return (
     <Panel title="Players on your street" note={me.level < 3 ? "You can attack other players from level 3" : "New players are protected for their first day"} flush>
@@ -140,7 +137,7 @@ function PlayersHere({ can }) {
           <button className="iconbtn" style={{ border: 0, width: 44, height: 44, padding: 0, background: "none" }} onClick={() => go("player/" + t.id)} aria-label={`View ${t.name}`}><Avatar seed={t.id} look={t.look} /></button>
           <div><button className="t" style={{ background: "none", border: 0, padding: 0, font: "inherit", fontWeight: 650 }} onClick={() => go("player/" + t.id)}>{t.name}</button>
             <div className="s">Level {t.level}, {t.wins} wins, looks <span className={HINT[t.power_hint]}>{t.power_hint}</span></div></div>
-          <div className="act">{t.protected ? <span className="pill">New in town</span> : <button className="btn sm danger" disabled={busy || !can || me.level < 3} onClick={() => attack(t)}>Attack</button>}</div>
+          <div className="act">{t.protected ? <span className="pill">New in town</span> : <button className="btn sm danger" disabled={busy || !can || me.level < 3} onClick={() => startFight(t.id)}>Attack</button>}</div>
         </div>))}</div>}
     </Panel>
   );

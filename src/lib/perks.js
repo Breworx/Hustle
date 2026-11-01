@@ -14,13 +14,15 @@ export const PERK_TEXT = {
   job: v => `+${Math.round(v * 10) / 10}% job odds`,
   travel_disc: v => v >= 1 ? "Free taxis" : `Taxis ${pc(v)} off`,
   travel_time: v => `Taxi rides ${pc(v)} quicker`,
+  arms: v => `Armoury ${pc(v)} off`,
+  carry: v => `+${Math.round(v * 10) / 10} kg carry limit`,
 };
 // [text, tone] pairs for a perk object (plus mood and stamina limits for homes).
 export function perkList(h) {
   const k = h.perks || {}, out = [];
   if (h.mood) out.push([`+${num(h.mood)} mood limit`, "good"]);
   if (h.stamina) out.push([`+${h.stamina} stamina limit`, "good"]);
-  for (const key of ["regen", "mug", "hosp", "jail", "heat", "gym", "job", "listings", "travel_disc", "travel_time"])
+  for (const key of ["regen", "mug", "hosp", "jail", "heat", "gym", "job", "listings", "travel_disc", "travel_time", "arms", "carry"])
     if (k[key]) out.push([PERK_TEXT[key](k[key]), k[key] < 0 ? "bad" : "good"]);
   if (k.travel_free) out.push([k.travel_fast ? "Free travel in 5 seconds" : "Free travel", "good"]);
   if (k.daily) out.push([`Every day: ${dailyText(k.daily)}`, "warn"]);

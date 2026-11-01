@@ -261,8 +261,24 @@ alter table game.players add column if not exists best_streak int not null defau
 alter table game.players add column if not exists mission jsonb not null default '{}'::jsonb;
 alter table game.players add column if not exists missions_done int not null default 0;
 alter table game.players add column if not exists chains_done text[] not null default '{}';
+-- The armoury: fight stats for every weapon, armour piece, throwable and box of ammo (filled by 02_content.sql).
+create table if not exists game.arms(
+  item_id text primary key, slot text not null, dmg numeric, acc numeric, shots int, ammo text, weight numeric not null default 0,
+  lvl int, price bigint, box int, effect text, def numeric);
+-- What you carry into a fight: {"melee": id, "sidearm": id, "long": id, "head": id, ..., "throw": [id, id, id]}.
+alter table game.players add column if not exists loadout jsonb not null default '{}'::jsonb;
+create table if not exists game.fights(id bigint generated always as identity primary key,
+  attacker uuid references game.players(id) on delete cascade, defender uuid references game.players(id) on delete cascade,
+  a_hp numeric not null, d_hp numeric not null, a_max numeric not null, d_max numeric not null,
+  war_id bigint references game.wars(id) on delete set null, turn int not null default 0,
+  fx jsonb not null default '{}'::jsonb, log jsonb not null default '[]'::jsonb,
+  status text not null default 'on', result jsonb, created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(), ended_at timestamptz);
+create unique index if not exists fights_one_live on game.fights (attacker) where status = 'on';
+create index if not exists fights_defender on game.fights (defender) where status = 'on';
+create index if not exists fights_attacker on game.fights (attacker, created_at desc);
 do $$ declare t text; begin
-  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf'] loop
+  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights'] loop
     execute format('alter table game.%I enable row level security', t);
     execute format('revoke all on game.%I from public', t);
   end loop;
@@ -274,7 +290,7 @@ create or replace function game.pval(j jsonb) returns numeric language sql immut
 -- A player's total perk from their home, vehicle and career, capped so nothing becomes free or instant by stacking.
 create or replace function game.hperk(pid uuid, k text) returns numeric language sql stable as $$
   select case k when 'mug' then least(0.9, t) when 'hosp' then least(0.6, t) when 'jail' then least(0.6, t) when 'travel_disc' then least(1, t)
-                when 'travel_time' then least(0.9, t) when 'heat' then least(1.5, t) when 'travel_free' then least(1, t) when 'travel_fast' then least(1, t) else t end
+                when 'travel_time' then least(0.9, t) when 'heat' then least(1.5, t) when 'travel_free' then least(1, t) when 'travel_fast' then least(1, t) when 'arms' then least(0.5, t) when 'carry' then least(20, t) else t end
   from (select coalesce((select game.pval(h.perks->k) from game.players p join game.properties h on h.id = p.property where p.id = pid), 0)
              + coalesce((select game.pval(v.perks->k) from game.players p join game.vehicles v on v.id = p.vehicle where p.id = pid), 0)
              + coalesce((select c.max * p.career_rank / 10.0 from game.players p join game.careers c on c.id = p.career where p.id = pid and c.perk = k), 0)
@@ -438,11 +454,11 @@ begin
   if coalesce(q, 0) < n then raise exception 'You don''t have enough of that.'; end if;
   if q = n then
     delete from game.inventory where player_id = pid and item_id = iid;
-    update game.players set weapon = case when weapon = iid then null else weapon end,
-                            armour = case when armour = iid then null else armour end where id = pid;
   else
     update game.inventory set qty = qty - n where player_id = pid and item_id = iid;
   end if;
+  -- Anything you no longer own comes out of your loadout.
+  if exists (select 1 from game.arms where item_id = iid and slot <> 'ammo') then perform game.loadout_clean(pid); end if;
 end $$;
 
 -- Loot roll. Think of one big bag holding every copy of every item that will ever exist: each drop pulls one out.
@@ -458,7 +474,7 @@ begin
     tries := tries + 1; r := random(); pick := null;
     with wt as (select id, power(1 + boost, rarity) * coalesce(supply - minted, (array[6000,1200,200,30,5])[rarity + 1]) as w
                 from game.items
-                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token') and season is null and (supply is null or minted < supply)),
+                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token', 'war_trophy') and id not like 'arm\_%' and id not like 'ammo\_%' and season is null and (supply is null or minted < supply)),
          cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
     select id into pick from cum where cw >= r * tw order by cw limit 1;
     if pick is not null then
@@ -679,70 +695,6 @@ begin
 end $$;
 
 -- ---------- player vs player ----------
-create or replace function public.attack(p_target uuid) returns jsonb
-language plpgsql security definer set search_path = game, public as $$
-declare p game.players; t game.players; pa numeric; pd numeric; ch numeric; mug bigint := 0; secs int; xp int; w game.wars; wp numeric;
-begin
-  perform game.wars_tick();
-  p := game.me(); perform game.need_free(p);
-  if p_target = p.id then raise exception 'You can''t attack yourself.'; end if;
-  if p.level < 3 then raise exception 'You need level 3 before you can attack other players.'; end if;
-  select * into t from game.players where id = p_target for update;
-  if not found then raise exception 'Nobody by that name.'; end if;
-  if game.status(t) <> 'ok' then raise exception '% isn''t around right now.', t.name; end if;
-  w := game.war_between(p.crew_id, t.crew_id);
-  -- At war, you can hit the enemy anywhere in the city. Otherwise you have to find them on your street.
-  if t.district <> p.district and w.id is null then raise exception '% is in another district.', t.name; end if;
-  if p.crew_id is not null and t.crew_id = p.crew_id then raise exception '% is in your crew.', t.name; end if;
-  if t.level < 3 or t.created_at > now() - interval '1 day' then raise exception '% is new to the city. Leave them be for now.', t.name; end if;
-  if p.stamina < 25 then raise exception 'You need 25 stamina to start a fight.'; end if;
-  if p.health < p.max_health * 0.3 then raise exception 'You''re too beaten up. Heal first.'; end if;
-  if exists (select 1 from game.attacks where attacker = p.id and defender = t.id
-             and at > now() - case when w.id is not null then interval '3 minutes' else interval '10 minutes' end) then
-    raise exception 'You hit % recently. Give it % minutes.', t.name, case when w.id is not null then 'three' else 'ten' end; end if;
-  pa := game.power(p); pd := game.power(t);
-  ch := least(0.95, greatest(0.05, 1 / (1 + exp(-8 * (pa / (pa + pd) - 0.5)))));
-  update game.players set stamina = stamina - 25, heat = least(100, heat + 5) where id = p.id;
-  if random() < ch then
-    mug := floor(t.cash * (0.05 + random() * 0.05) * (1 - game.hperk(t.id, 'mug')));
-    secs := round((300 + floor(random() * 600)) * (1 - game.hperk(t.id, 'hosp')))::int;
-    update game.players set cash = cash - mug, losses = losses + 1, health = greatest(1, round(health * 0.2)),
-      hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Mugged by ' || p.name where id = t.id;
-    update game.players set cash = cash + mug, wins = wins + 1 where id = p.id;
-    xp := 10 + t.level * 5;
-    perform game.gain_xp(p.id, xp); perform game.add_skill(p.id, 'fight', xp);
-    insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, true, mug);
-    perform game.notify(t.id, 'attacked', format('%s attacked you and took %s. You''re in A&E.', p.name, game.fmt(mug)));
-    if p.crew_id is not null then
-      update game.crews set respect = respect + 1 + t.level / 4 where id = p.crew_id;
-      perform game.turf_add(p.id, p.district, case when t.crew_id is not null then 10 else 4 end);
-    end if;
-    perform game.track(p.id, 'fight_win', 1);
-    if w.id is not null then
-      -- War points: bigger targets are worth more.
-      wp := round(3 + t.level / 3.0, 1);
-      insert into game.war_hits(war_id, crew_id, player_id, target, pts, cash) values (w.id, p.crew_id, p.id, t.id, wp, mug);
-      update game.wars set a_score = a_score + case when attacker = p.crew_id then wp else 0 end, d_score = d_score + case when defender = p.crew_id then wp else 0 end where id = w.id;
-      perform game.track(p.id, 'war_hit', 1);
-    end if;
-    return jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'chance', round(ch * 100), 'war_pts', wp);
-  else
-    secs := round((180 + floor(random() * 300)) * (1 - game.hperk(p.id, 'hosp')))::int;
-    update game.players set losses = losses + 1, health = greatest(1, round(health * 0.2)),
-      hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Beaten by ' || t.name where id = p.id;
-    update game.players set wins = wins + 1 where id = t.id;
-    perform game.gain_xp(t.id, 5); perform game.add_skill(t.id, 'fight', 5); perform game.add_skill(p.id, 'fight', 3);
-    insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, false, 0);
-    perform game.notify(t.id, 'defended', format('%s tried to attack you and lost.', p.name));
-    if w.id is not null then
-      -- Fighting someone off in a war is worth a point to their crew.
-      insert into game.war_hits(war_id, crew_id, player_id, target, pts) values (w.id, t.crew_id, t.id, p.id, 1);
-      update game.wars set a_score = a_score + case when attacker = t.crew_id then 1 else 0 end, d_score = d_score + case when defender = t.crew_id then 1 else 0 end where id = w.id;
-    end if;
-    return jsonb_build_object('won', false, 'name', t.name, 'secs', secs, 'chance', round(ch * 100));
-  end if;
-end $$;
-
 create or replace function public.list_players(p_scope text default 'here', p_q text default null) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare p game.players; out jsonb;
@@ -874,9 +826,8 @@ begin
   if not found then raise exception 'Unknown item.'; end if;
   if not exists (select 1 from game.inventory where player_id = p.id and item_id = it.id and qty > 0) then raise exception 'You don''t have one.'; end if;
   if it.cat in ('weapon', 'armour') then
-    if it.cat = 'weapon' then update game.players set weapon = case when weapon = it.id then null else it.id end where id = p.id;
-    else update game.players set armour = case when armour = it.id then null else it.id end where id = p.id; end if;
-    return jsonb_build_object('equipped', it.id);
+    if exists (select 1 from game.fights where attacker = p.id and status = 'on') then raise exception 'Not mid-fight.'; end if;
+    return game.loadout_put(p.id, it.id) || jsonb_build_object('equipped', it.id);
   end if;
   e := it.effect;
   if e = '{}'::jsonb then raise exception 'You can''t use that. Sell it or keep it.'; end if;
@@ -2700,6 +2651,396 @@ begin
   return jsonb_build_object('sold', true, 'price', o.amount);
 end $$;
 
+-- =====================================================================
+-- THE ARMOURY, LOADOUTS AND TURN-BY-TURN FIGHTS
+-- =====================================================================
+
+-- How much you can carry (kg): more strength, more kit.
+create or replace function game.carry_limit(p game.players) returns numeric language sql stable as $$
+  select round((12 + sqrt(greatest(0, p.str)) + game.hperk(p.id, 'carry'))::numeric, 1) $$;
+
+-- Total weight of everything in your loadout (each throwable counts).
+create or replace function game.loadout_weight(lo jsonb) returns numeric language sql stable as $$
+  select coalesce((select sum(a.weight) from jsonb_each_text(lo - 'throw') e join game.arms a on a.item_id = e.value), 0)
+       + coalesce((select sum(a.weight) from jsonb_array_elements_text(coalesce(lo->'throw', '[]')) t join game.arms a on a.item_id = t), 0) $$;
+
+-- Keep the old single weapon/armour columns (used for overall fight power) in step with the loadout.
+create or replace function game.loadout_sync(pid uuid) returns void language sql as $$
+  update game.players p set
+    weapon = (select a.item_id from game.arms a join game.items i on i.id = a.item_id
+              where a.item_id in (p.loadout->>'melee', p.loadout->>'sidearm', p.loadout->>'long') order by i.fx desc limit 1),
+    armour = p.loadout->>'body'
+  where p.id = pid $$;
+
+-- Drop anything from the loadout you no longer own (sold, pawned, thrown).
+create or replace function game.loadout_clean(pid uuid) returns void language plpgsql as $$
+declare lo jsonb; k text; th jsonb := '[]'; x text; owned int;
+begin
+  select loadout into lo from game.players where id = pid;
+  if lo is null or lo = '{}'::jsonb then return; end if;
+  for k in select jsonb_object_keys(lo - 'throw') loop
+    if not exists (select 1 from game.inventory where player_id = pid and item_id = lo->>k and qty > 0) then lo := lo - k; end if;
+  end loop;
+  for x in select jsonb_array_elements_text(coalesce(lo->'throw', '[]')) loop
+    select coalesce(qty, 0) into owned from game.inventory where player_id = pid and item_id = x;
+    if coalesce(owned, 0) > (select count(*) from jsonb_array_elements_text(th) t where t = x) then th := th || to_jsonb(x); end if;
+  end loop;
+  lo := jsonb_set(lo, '{throw}', th);
+  update game.players set loadout = lo where id = pid;
+  perform game.loadout_sync(pid);
+end $$;
+
+-- Put an item into its slot (or take it out, if it's already there). Throwables stack up to three.
+create or replace function game.loadout_put(pid uuid, iid text, remove boolean default false) returns jsonb language plpgsql as $$
+declare p game.players; a game.arms; lo jsonb; th jsonb; owned int; w numeric; lim numeric; was text;
+begin
+  select * into p from game.players where id = pid for update;
+  select * into a from game.arms where item_id = iid;
+  if not found or a.slot = 'ammo' then raise exception 'That isn''t something you can carry into a fight.'; end if;
+  select coalesce(qty, 0) into owned from game.inventory where player_id = pid and item_id = iid;
+  if coalesce(owned, 0) < 1 then raise exception 'You don''t have one.'; end if;
+  lo := coalesce(p.loadout, '{}'::jsonb);
+  if a.slot = 'throw' then
+    th := coalesce(lo->'throw', '[]');
+    if remove then
+      lo := jsonb_set(lo, '{throw}', coalesce((select jsonb_agg(x order by o) from jsonb_array_elements_text(th) with ordinality t(x, o)
+             where o <> (select min(o2) from jsonb_array_elements_text(th) with ordinality u(x2, o2) where x2 = iid)), '[]'));
+    else
+      if jsonb_array_length(th) >= 3 then raise exception 'You can only carry three throwables.'; end if;
+      if (select count(*) from jsonb_array_elements_text(th) t where t = iid) >= owned then raise exception 'You don''t have any more of those.'; end if;
+      lo := jsonb_set(lo, '{throw}', th || to_jsonb(iid));
+    end if;
+  else
+    was := lo->>a.slot;
+    if remove or was = iid then lo := lo - a.slot; else lo := jsonb_set(lo, array[a.slot], to_jsonb(iid)); end if;
+  end if;
+  w := game.loadout_weight(lo); lim := game.carry_limit(p);
+  if w > lim and not remove and coalesce(was, '') <> iid then
+    raise exception 'That would take you to % kg. You can carry % kg. Train strength to carry more.', round(w, 1), lim; end if;
+  update game.players set loadout = lo where id = pid;
+  perform game.loadout_sync(pid);
+  return jsonb_build_object('loadout', lo, 'weight', w, 'limit', lim);
+end $$;
+
+create or replace function public.loadout_set(p_item text, p_remove boolean default false) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  if exists (select 1 from game.fights where attacker = p.id and status = 'on') then raise exception 'Not mid-fight.'; end if;
+  return game.loadout_put(p.id, p_item, coalesce(p_remove, false));
+end $$;
+
+create or replace function public.armoury() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  perform game.loadout_clean(p.id);
+  select * into p from game.players where id = p.id;
+  return jsonb_build_object('loadout', p.loadout, 'weight', game.loadout_weight(p.loadout), 'limit', game.carry_limit(p), 'level', p.level,
+    'arms', (select jsonb_agg(to_jsonb(a) || jsonb_build_object('owned', coalesce((select qty from game.inventory v where v.player_id = p.id and v.item_id = a.item_id), 0))
+             order by a.slot, coalesce(a.price, 0), a.dmg, a.def)
+             from game.arms a where a.price is not null or exists (select 1 from game.inventory v where v.player_id = p.id and v.item_id = a.item_id and v.qty > 0)));
+end $$;
+
+create or replace function public.arms_buy(p_item text, p_qty int default 1) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; a game.arms; q int := greatest(1, least(coalesce(p_qty, 1), 100)); cost bigint; units int;
+begin
+  p := game.me();
+  select * into a from game.arms where item_id = p_item and price is not null;
+  if not found then raise exception 'The armoury doesn''t sell that.'; end if;
+  if p.level < a.lvl then raise exception 'You need level % to buy that.', a.lvl; end if;
+  -- Trade skill and an armoury discount from your company stack, up to 60% off.
+  cost := round(a.price * q * (1 - least(0.6, least(0.15, (game.skill_lvl(p.skills, 'trade') - 1) * 0.005) + game.hperk(p.id, 'arms'))));
+  if p.cash < cost then raise exception 'That''s %. You have % on you.', game.fmt(cost), game.fmt(p.cash); end if;
+  units := q * coalesce(a.box, 1);
+  update game.players set cash = cash - cost where id = p.id;
+  perform game.give(p.id, a.item_id, units);
+  return jsonb_build_object('item', a.item_id, 'qty', units, 'cost', cost);
+end $$;
+
+-- ---------- fights ----------
+-- Whether p may attack t right now; returns the war between them, if any.
+create or replace function game.pvp_check(p game.players, t game.players) returns game.wars language plpgsql as $$
+declare w game.wars;
+begin
+  if t.id = p.id then raise exception 'You can''t attack yourself.'; end if;
+  if p.level < 3 then raise exception 'You need level 3 before you can attack other players.'; end if;
+  if game.status(t) <> 'ok' then raise exception '% isn''t around right now.', t.name; end if;
+  w := game.war_between(p.crew_id, t.crew_id);
+  if t.district <> p.district and w.id is null then raise exception '% is in another district.', t.name; end if;
+  if p.crew_id is not null and t.crew_id = p.crew_id then raise exception '% is in your crew.', t.name; end if;
+  if t.level < 3 or t.created_at > now() - interval '1 day' then raise exception '% is new to the city. Leave them be for now.', t.name; end if;
+  if p.stamina < 25 then raise exception 'You need 25 stamina to start a fight.'; end if;
+  if p.health < p.max_health * 0.3 then raise exception 'You''re too beaten up. Heal first.'; end if;
+  if exists (select 1 from game.attacks where attacker = p.id and defender = t.id
+             and at > now() - case when w.id is not null then interval '3 minutes' else interval '10 minutes' end) then
+    raise exception 'You hit % recently. Give it % minutes.', t.name, case when w.id is not null then 'three' else 'ten' end; end if;
+  if exists (select 1 from game.fights where defender = t.id and status = 'on') then raise exception '% is already in a fight.', t.name; end if;
+  return w;
+end $$;
+
+-- One swing or shot. Accuracy leans on dexterity against speed; damage on strength against defence.
+-- Where it lands matters: head shots hurt most, and armour on that spot soaks up its share.
+create or replace function game.strike(a game.players, d game.players, w game.arms, blind boolean, dodge numeric) returns jsonb language plpgsql as $$
+declare ch numeric; r numeric; loc text; m numeric; dm numeric; arm numeric;
+begin
+  ch := least(95, greatest(5, w.acc * least(1.4, greatest(0.6, sqrt((a.dex + 1) / (d.spd + 1)))) * case when blind then 0.6 else 1 end * dodge));
+  if random() * 100 >= ch then return jsonb_build_object('hit', false); end if;
+  r := random();
+  loc := case when r < 0.15 then 'head' when r < 0.6 then 'body' when r < 0.7 then 'hands' when r < 0.9 then 'legs' else 'feet' end;
+  m := case loc when 'head' then 1.4 when 'body' then 1 when 'hands' then 0.7 when 'legs' then 0.9 else 0.7 end;
+  select ar.def into arm from game.arms ar where ar.item_id = d.loadout->>loc
+    and exists (select 1 from game.inventory v where v.player_id = d.id and v.item_id = ar.item_id and v.qty > 0);
+  dm := round((w.dmg * least(1.6, greatest(0.6, sqrt((a.str + 1) / (d.def + 1)))) * (0.85 + random() * 0.3) * m * (1 - coalesce(arm, 0) / 100.0))::numeric, 1);
+  return jsonb_build_object('hit', true, 'dmg', greatest(1, dm), 'loc', loc, 'armour', coalesce(arm, 0) > 0);
+end $$;
+
+create or replace function game.fists() returns game.arms language sql immutable as $$
+  select row('fists', 'melee', 6, 85, 1, null, 0, null, null, 1, null, null)::game.arms $$;
+
+-- The equipped weapon in a slot, if you still own it.
+create or replace function game.weapon_in(p game.players, p_slot text) returns game.arms language sql stable as $$
+  select a.* from game.arms a where a.item_id = p.loadout->>p_slot and a.slot = p_slot
+    and exists (select 1 from game.inventory v where v.player_id = p.id and v.item_id = a.item_id and v.qty > 0) $$;
+
+-- What the computer does for a defender (or for a quick attack): the best weapon it can fire, sometimes a throwable first.
+create or replace function game.fight_ai(p game.players, first boolean) returns text language plpgsql as $$
+declare best text := 'fists'; bestv numeric := 6 * 0.85; s text; w game.arms; v numeric; th text;
+begin
+  th := p.loadout->'throw'->>0;
+  if first and th is not null and random() < 0.4 then return 'throw:' || th; end if;
+  foreach s in array array['melee', 'sidearm', 'long'] loop
+    w := game.weapon_in(p, s);
+    if w.item_id is null then continue; end if;
+    if w.ammo is not null and coalesce((select qty from game.inventory where player_id = p.id and item_id = w.ammo), 0) < 1 then continue; end if;
+    v := w.dmg * w.acc / 100.0 * coalesce(w.shots, 1);
+    if v > bestv then bestv := v; best := s; end if;
+  end loop;
+  return best;
+end $$;
+
+-- One side's move. Applies damage and effects to the fight row and returns what happened.
+create or replace function game.fight_act(fid bigint, side text, act text) returns jsonb language plpgsql as $$
+declare f game.fights; me game.players; op game.players; w game.arms; other text := case side when 'a' then 'd' else 'a' end;
+  myfx jsonb; opfx jsonb; s jsonb; n int := 1; i int; have int; total numeric := 0; hits int := 0; locs text[] := '{}'; th jsonb; itm text; burn numeric := 0; line jsonb;
+begin
+  select * into f from game.fights where id = fid for update;
+  select * into me from game.players where id = case side when 'a' then f.attacker else f.defender end;
+  select * into op from game.players where id = case side when 'a' then f.defender else f.attacker end;
+  myfx := coalesce(f.fx->side, '{}'); opfx := coalesce(f.fx->other, '{}');
+  -- Burning hurts at the start of your turn.
+  if coalesce((myfx->>'burn')::int, 0) > 0 then
+    burn := 7; myfx := jsonb_set(myfx, '{burn}', to_jsonb((myfx->>'burn')::int - 1));
+    if side = 'a' then f.a_hp := f.a_hp - burn; else f.d_hp := f.d_hp - burn; end if;
+  end if;
+  if coalesce((myfx->>'stun')::int, 0) > 0 then
+    myfx := myfx - 'stun';
+    line := jsonb_build_object('side', side, 'stunned', true, 'burn', burn);
+  elsif act like 'flee%' then
+    line := jsonb_build_object('side', side, 'flee', true, 'escaped', act = 'flee:ok', 'burn', burn);
+  else
+    if act like 'throw:%' then
+      itm := substr(act, 7);
+      th := coalesce(me.loadout->'throw', '[]');
+      if not exists (select 1 from jsonb_array_elements_text(th) t where t = itm) then raise exception 'You''re not carrying one of those.'; end if;
+      select * into w from game.arms where item_id = itm;
+      perform game.take(me.id, itm, 1);   -- also drops it from the loadout
+    elsif act in ('melee', 'sidearm', 'long') then
+      w := game.weapon_in(me, act);
+      if w.item_id is null then raise exception 'Nothing in that slot.'; end if;
+      if w.ammo is not null then
+        have := coalesce((select qty from game.inventory where player_id = me.id and item_id = w.ammo), 0);
+        if have < 1 then raise exception 'Out of ammo for that.'; end if;
+        n := least(coalesce(w.shots, 1), have);
+        perform game.take(me.id, w.ammo, n);
+      else n := coalesce(w.shots, 1); end if;
+    else
+      w := game.fists();
+    end if;
+    for i in 1..n loop
+      if w.effect = 'smoke' then exit; end if;
+      s := game.strike(me, op, w, coalesce((myfx->>'blind')::int, 0) > 0, case when coalesce((opfx->>'smoke')::int, 0) > 0 then 0.35 else 1 end);
+      if (s->>'hit')::boolean then
+        hits := hits + 1; total := total + (s->>'dmg')::numeric; locs := locs || (s->>'loc');
+      end if;
+    end loop;
+    if w.effect = 'smoke' then myfx := jsonb_set(myfx, '{smoke}', '2');
+    elsif hits > 0 and w.effect = 'stun' and (w.item_id <> 'fists' and (w.slot = 'throw' or random() < 0.25)) then opfx := jsonb_set(opfx, '{stun}', '1');
+    elsif hits > 0 and w.effect = 'blind' then opfx := jsonb_set(opfx, '{blind}', '2');
+    elsif hits > 0 and w.effect = 'burn' then opfx := jsonb_set(opfx, '{burn}', '2');
+    end if;
+    if coalesce((opfx->>'smoke')::int, 0) > 0 then opfx := jsonb_set(opfx, '{smoke}', to_jsonb((opfx->>'smoke')::int - 1)); end if;
+    if side = 'a' then f.d_hp := f.d_hp - total; else f.a_hp := f.a_hp - total; end if;
+    line := jsonb_build_object('side', side, 'weapon', w.item_id, 'shots', n, 'hits', hits, 'dmg', total, 'locs', to_jsonb(locs), 'effect', w.effect, 'burn', burn);
+  end if;
+  if coalesce((myfx->>'blind')::int, 0) > 0 then myfx := jsonb_set(myfx, '{blind}', to_jsonb((myfx->>'blind')::int - 1)); end if;
+  update game.fights set a_hp = f.a_hp, d_hp = f.d_hp, fx = jsonb_build_object(side, myfx, other, opfx), log = log || jsonb_build_array(line) where id = fid;
+  return line;
+end $$;
+
+-- Rewards and consequences once a fight is decided.
+create or replace function game.fight_end(fid bigint, outcome text) returns void language plpgsql as $$
+declare f game.fights; p game.players; t game.players; mug bigint := 0; secs int := 0; xp int := 0; wp numeric; w game.wars; res jsonb;
+begin
+  select * into f from game.fights where id = fid for update;
+  if f.status <> 'on' then return; end if;
+  select * into p from game.players where id = f.attacker for update;
+  select * into t from game.players where id = f.defender for update;
+  select * into w from game.wars where id = f.war_id and status = 'active';
+  if outcome = 'win' then
+    mug := floor(t.cash * (0.05 + random() * 0.05) * (1 - game.hperk(t.id, 'mug')));
+    secs := round((300 + floor(random() * 600)) * (1 - game.hperk(t.id, 'hosp')))::int;
+    update game.players set cash = cash - mug, losses = losses + 1, health = 1,
+      hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Mugged by ' || p.name where id = t.id;
+    update game.players set cash = cash + mug, wins = wins + 1, health = greatest(1, round(f.a_hp)) where id = p.id;
+    xp := 10 + t.level * 5;
+    perform game.gain_xp(p.id, xp); perform game.add_skill(p.id, 'fight', xp);
+    insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, true, mug);
+    perform game.notify(t.id, 'attacked', format('%s attacked you and took %s. You''re in A&E.', p.name, game.fmt(mug)));
+    if p.crew_id is not null then
+      update game.crews set respect = respect + 1 + t.level / 4 where id = p.crew_id;
+      perform game.turf_add(p.id, p.district, case when t.crew_id is not null then 10 else 4 end);
+    end if;
+    perform game.track(p.id, 'fight_win', 1);
+    if w.id is not null then
+      wp := round(3 + t.level / 3.0, 1);
+      insert into game.war_hits(war_id, crew_id, player_id, target, pts, cash) values (w.id, p.crew_id, p.id, t.id, wp, mug);
+      update game.wars set a_score = a_score + case when attacker = p.crew_id then wp else 0 end, d_score = d_score + case when defender = p.crew_id then wp else 0 end where id = w.id;
+      perform game.track(p.id, 'war_hit', 1);
+    end if;
+    res := jsonb_build_object('won', true, 'cash', mug, 'xp', xp, 'name', t.name, 'secs', secs, 'war_pts', wp);
+  elsif outcome = 'loss' then
+    secs := round((180 + floor(random() * 300)) * (1 - game.hperk(p.id, 'hosp')))::int;
+    update game.players set losses = losses + 1, health = 1,
+      hosp_until = now() + make_interval(secs => secs), hosp_reason = 'Beaten by ' || t.name where id = p.id;
+    update game.players set wins = wins + 1, health = greatest(1, round(f.d_hp)) where id = t.id;
+    perform game.gain_xp(t.id, 5); perform game.add_skill(t.id, 'fight', 5); perform game.add_skill(p.id, 'fight', 3);
+    insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, false, 0);
+    perform game.notify(t.id, 'defended', format('%s tried to attack you and lost.', p.name));
+    if w.id is not null then
+      insert into game.war_hits(war_id, crew_id, player_id, target, pts) values (w.id, t.crew_id, t.id, p.id, 1);
+      update game.wars set a_score = a_score + case when attacker = t.crew_id then 1 else 0 end, d_score = d_score + case when defender = t.crew_id then 1 else 0 end where id = w.id;
+    end if;
+    res := jsonb_build_object('won', false, 'name', t.name, 'secs', secs);
+  else
+    -- A draw, or you ran: both walk away with the damage they took.
+    update game.players set health = greatest(1, round(f.a_hp)) where id = p.id;
+    update game.players set health = greatest(1, round(f.d_hp)) where id = t.id;
+    insert into game.attacks(attacker, defender, attacker_won, cash) values (p.id, t.id, false, 0);
+    perform game.notify(t.id, 'defended', case when outcome = 'fled' then format('%s attacked you, then ran for it.', p.name) else format('You and %s fought to a standstill.', p.name) end);
+    res := jsonb_build_object('won', false, 'draw', true, 'fled', outcome = 'fled', 'name', t.name);
+  end if;
+  update game.fights set status = outcome, ended_at = now(), result = res where id = fid;
+end $$;
+
+-- Close fights left hanging for more than ten minutes (the attacker walked off).
+create or replace function game.fights_tick() returns void language plpgsql as $$
+declare f record;
+begin
+  for f in select id from game.fights where status = 'on' and updated_at < now() - interval '10 minutes' for update skip locked loop
+    perform game.fight_end(f.id, 'fled');
+  end loop;
+end $$;
+
+create or replace function game.fight_view(fid bigint) returns jsonb language plpgsql as $$
+declare f game.fights; p game.players; t game.players; acts jsonb := '[]'; s text; w game.arms; ammo int;
+begin
+  select * into f from game.fights where id = fid;
+  select * into p from game.players where id = f.attacker;
+  select * into t from game.players where id = f.defender;
+  foreach s in array array['melee', 'sidearm', 'long'] loop
+    w := game.weapon_in(p, s);
+    if w.item_id is not null then
+      ammo := case when w.ammo is null then null else coalesce((select qty from game.inventory where player_id = p.id and item_id = w.ammo), 0) end;
+      acts := acts || jsonb_build_object('act', s, 'item', w.item_id, 'dmg', w.dmg, 'acc', w.acc, 'shots', coalesce(w.shots, 1), 'ammo', ammo, 'ammo_item', w.ammo, 'effect', w.effect);
+    end if;
+  end loop;
+  acts := acts || coalesce((select jsonb_agg(jsonb_build_object('act', 'throw:' || x, 'item', x, 'dmg', a.dmg, 'acc', a.acc, 'effect', a.effect, 'count', c))
+            from (select x, count(*) c from jsonb_array_elements_text(coalesce(p.loadout->'throw', '[]')) x group by x) z join game.arms a on a.item_id = z.x), '[]');
+  return jsonb_build_object('id', f.id, 'status', f.status, 'turn', f.turn, 'max_turns', 25, 'log', f.log, 'result', f.result, 'fx', f.fx, 'war', f.war_id is not null,
+    'me', game.card(p) || jsonb_build_object('hp', greatest(0, round(f.a_hp, 1)), 'max', f.a_max, 'loadout', p.loadout),
+    'them', game.card(t) || jsonb_build_object('hp', greatest(0, round(f.d_hp, 1)), 'max', f.d_max, 'loadout', t.loadout,
+       'power_hint', case when game.power(t) > game.power(p) * 1.5 then 'much stronger' when game.power(t) > game.power(p) * 1.1 then 'stronger'
+         when game.power(t) < game.power(p) * 0.66 then 'much weaker' when game.power(t) < game.power(p) * 0.9 then 'weaker' else 'even' end),
+    'actions', acts);
+end $$;
+
+create or replace function public.fight_start(p_target uuid) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; t game.players; w game.wars; fid bigint;
+begin
+  perform game.wars_tick(); perform game.fights_tick();
+  p := game.me(); perform game.need_free(p);
+  select id into fid from game.fights where attacker = p.id and status = 'on';
+  if fid is not null then return game.fight_view(fid); end if;
+  perform game.loadout_clean(p.id); perform game.loadout_clean(p_target);
+  select * into p from game.players where id = p.id;
+  select * into t from game.players where id = p_target for update;
+  if not found then raise exception 'Nobody by that name.'; end if;
+  w := game.pvp_check(p, t);
+  update game.players set stamina = stamina - 25, heat = least(100, heat + 5) where id = p.id;
+  insert into game.fights(attacker, defender, a_hp, d_hp, a_max, d_max, war_id)
+    values (p.id, t.id, p.health, t.health, p.max_health, t.max_health, w.id) returning id into fid;
+  return game.fight_view(fid);
+end $$;
+
+create or replace function public.fight_turn(p_fight bigint, p_action text) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; f game.fights; t game.players; ok boolean;
+begin
+  p := game.me();
+  select * into f from game.fights where id = p_fight for update;
+  if not found or f.attacker <> p.id then raise exception 'That isn''t your fight.'; end if;
+  if f.status <> 'on' then return game.fight_view(f.id); end if;
+  if p_action = 'flee' then
+    -- Running works half the time, always if you're hidden in smoke.
+    ok := (random() < 0.5 or coalesce((f.fx->'a'->>'smoke')::int, 0) > 0) and coalesce((f.fx->'a'->>'stun')::int, 0) = 0;
+    perform game.fight_act(f.id, 'a', case when ok then 'flee:ok' else 'flee:no' end);
+    select * into f from game.fights where id = p_fight;
+    if f.a_hp <= 0 then perform game.fight_end(f.id, 'loss'); return game.fight_view(f.id); end if;
+    if ok then perform game.fight_end(f.id, 'fled'); return game.fight_view(f.id); end if;
+  else
+    perform game.fight_act(f.id, 'a', p_action);
+    select * into f from game.fights where id = p_fight;
+    if f.d_hp <= 0 then perform game.fight_end(f.id, 'win'); return game.fight_view(f.id); end if;
+    if f.a_hp <= 0 then perform game.fight_end(f.id, 'loss'); return game.fight_view(f.id); end if;
+  end if;
+  select * into t from game.players where id = f.defender;
+  perform game.fight_act(f.id, 'd', game.fight_ai(t, f.turn = 0));
+  select * into f from game.fights where id = p_fight;
+  if f.a_hp <= 0 then perform game.fight_end(f.id, 'loss'); return game.fight_view(f.id); end if;
+  if f.d_hp <= 0 then perform game.fight_end(f.id, 'win'); return game.fight_view(f.id); end if;
+  update game.fights set turn = turn + 1, updated_at = now() where id = f.id returning * into f;
+  if f.turn >= 25 then perform game.fight_end(f.id, 'draw'); end if;
+  return game.fight_view(f.id);
+end $$;
+
+create or replace function public.fight_get(p_fight bigint) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  perform game.fights_tick();
+  p := game.me();
+  if not exists (select 1 from game.fights where id = p_fight and attacker = p.id) then raise exception 'That isn''t your fight.'; end if;
+  return game.fight_view(p_fight);
+end $$;
+
+-- A quick attack: the computer picks your moves too. Same rules, same rewards.
+create or replace function public.attack(p_target uuid) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare v jsonb; fid bigint; p game.players; i int := 0;
+begin
+  v := public.fight_start(p_target); fid := (v->>'id')::bigint;
+  while (select status from game.fights where id = fid) = 'on' and i < 30 loop
+    select * into p from game.players where id = (select attacker from game.fights where id = fid);
+    v := public.fight_turn(fid, game.fight_ai(p, false)); i := i + 1;
+  end loop;
+  return (select result || jsonb_build_object('fight', fid, 'turns', turn + 1) from game.fights where id = fid);
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -2713,7 +3054,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

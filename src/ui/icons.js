@@ -1,5 +1,6 @@
 // One consistent icon set (Lucide).
 export {
+  Backpack, Zap, EyeOff, Wind, Cloud, Sandwich, WashingMachine, ShoppingBasket, Scissors, HandCoins, KeyRound, Pizza, PackageOpen, Wrench, Beer, Fish, Recycle, CarTaxiFront, Gavel, Hop, Dices, Hospital,
   House, Briefcase, Dumbbell, Swords, Store, ChartLine, Map, Users, Landmark, ShoppingBag, Lock, HeartPulse, Trophy, MessageSquare,
   Bell, LogOut, Package, Search, X, Car, Sun, Moon, Flame, Send, Clock, ArrowUpRight, ArrowDownRight, Sparkles,
   Menu, TriangleAlert, Check, Info, Coins, Shield, Crosshair, Footprints, Brain, MapPin, Plus, Minus, User, Building,

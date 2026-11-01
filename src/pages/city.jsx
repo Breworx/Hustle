@@ -10,6 +10,7 @@ import { money, short, ago, num } from "../lib/format.js";
 import { go, DISTRICT_NAMES } from "../lib/nav.js";
 import { bustStory, pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
+import { useStartFight } from "./armoury.jsx";
 
 const STATUS = { ok: ["Out and about", "good"], jail: ["In the cells", "warn"], hosp: ["In A&E", "bad"], travel: ["In a taxi", ""] };
 const hasBlock = (holdings, t) => (holdings[t]?.shares || 0) >= (STOCKS.find(s => s.t === t)?.shares || 1e12);
@@ -70,7 +71,7 @@ export function Players() {
 }
 
 export function Profile({ arg }) {
-  const { me, run, busy, showSheet, toast } = useGame();
+  const { me, run, busy, showSheet, toast } = useGame(); const startFight = useStartFight();
   const [p, setP] = useState(null); const [err, setErr] = useState("");
   const load = () => call("get_profile", { p_id: arg }).then(setP).catch(e => setErr(e.message));
   useEffect(() => { load(); }, [arg]);
@@ -91,7 +92,7 @@ export function Profile({ arg }) {
             <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span>{p.founder && <span className="pill scarce"><Ic.Sparkles />Founder #{p.founder}</span>}{p.regular && <span className="pill good"><Ic.Star />Regular</span>}<span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
             {(p.jail_reason || p.hosp_reason) && <p className="tiny" style={{ marginTop: 6 }}>{p.jail_reason || p.hosp_reason}</p>}</div>
           {!p.is_me ? <div className="stack-sm" style={{ alignItems: "flex-end" }}>
-            <button className="btn danger" disabled={busy || !canHit} onClick={() => run("attack", { p_target: p.id }, r => { load(); showSheet({ verdict: r.won ? "You won" : "You lost", tone: r.won ? "good" : "bad", title: `You attacked ${r.name}`, story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E`], pic: <Avatar seed={p.id} look={p.look} /> }); })}><Ic.Swords />Attack</button>
+            <button className="btn danger" disabled={busy || !canHit} onClick={() => startFight(p.id)}><Ic.Swords />Attack</button>
             <div className="row"><button className="btn ghost sm" onClick={() => go("messages/" + p.id)}><Ic.Mail />Message</button>
               <button className="btn ghost sm" disabled={busy} onClick={() => run("contact_toggle", { p_id: p.id }, r => { load(); toast(r.contact ? `${p.name} added to your contacts.` : `${p.name} removed from your contacts.`); })}>{p.is_contact ? <><Ic.UserCheck />In contacts</> : <><Ic.UserPlus />Add to contacts</>}</button></div>
             {why && <span className="tiny" style={{ maxWidth: 260, textAlign: "right" }}>{why}</span>}</div>

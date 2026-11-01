@@ -7,11 +7,16 @@ import { go, DISTRICT_NAMES } from "../lib/nav.js";
 import { PERK_TEXT } from "../lib/perks.js";
 import { pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
+import { useStartFight } from "./armoury.jsx";
 
 const linkBtn = { background: "none", border: 0, padding: 0, font: "inherit", color: "inherit", textAlign: "left", fontWeight: 650 };
 const Stars = ({ n }) => <span className="stars" aria-label={`${n} star${n === 1 ? "" : "s"}`}>{Array.from({ length: 10 }, (_, i) => <i key={i} className={i < n ? "on" : ""} />)}</span>;
 const TYPE_ICON = { coffee: Ic.Coffee, carwash: Ic.Car, tattoo: Ic.Pencil, boxing: Ic.Dumbbell, clinic: Ic.Stethoscope, lawfirm: Ic.Scale, nightclub: Ic.PartyPopper,
-  logistics: Ic.Truck, tech: Ic.Rocket, media: Ic.Megaphone };
+  logistics: Ic.Truck, tech: Ic.Rocket, media: Ic.Megaphone, foodtruck: Ic.Sandwich, laundromat: Ic.WashingMachine, dairy: Ic.ShoppingBasket, barber: Ic.Scissors,
+  couriers: Ic.Bike, pawnshop: Ic.HandCoins, locksmith: Ic.KeyRound, pizzeria: Ic.Pizza, sportsgoods: Ic.Target, removals: Ic.PackageOpen, mechanic: Ic.Wrench,
+  pub: Ic.Beer, security: Ic.ShieldCheck, range: Ic.Crosshair, seafood: Ic.Fish, scrapyard: Ic.Recycle, taxi: Ic.CarTaxiFront, dojo: Ic.Swords, gallery: Ic.Palette,
+  bailbonds: Ic.Gavel, brewery: Ic.Hop, hotel: Ic.Hotel, jeweller: Ic.Gem, haulage: Ic.Truck, military: Ic.Shield, casino: Ic.Dices, marina: Ic.Sailboat,
+  airline: Ic.Plane, developer: Ic.Building2, hospital: Ic.Hospital, bank: Ic.Landmark, shipping: Ic.Ship };
 
 // ---------------- Companies ----------------
 export function Companies() {
@@ -181,7 +186,7 @@ export function Company({ arg }) {
 const HINT = { "much weaker": "good", weaker: "good", even: "warn", stronger: "bad", "much stronger": "bad" };
 const STATUS = { ok: "Out and about", jail: "In the cells", hosp: "In A&E", travel: "In a taxi" };
 export function WarRoom() {
-  const { me, state, run, busy, toast, showSheet } = useGame();
+  const { me, state, run, busy, toast, showSheet } = useGame(); const startFight = useStartFight();
   const [d, setD] = useState(null); const [confirm, setConfirm] = useState(null); const [surrender, setSurrender] = useState(false);
   const load = () => call("war_state").then(setD).catch(() => {});
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
@@ -221,7 +226,7 @@ export function WarRoom() {
               <div><button style={linkBtn} onClick={() => go("player/" + t.id)}><Name p={t} tag={false} /></button>
                 <div className="s">Level {t.level} in {DISTRICT_NAMES[t.district]}. {STATUS[t.status]}{t.status !== "ok" && t.until ? <> for <Countdown until={t.until} onDone={load} /></> : ""}. Looks <span className={HINT[t.power_hint]}>{t.power_hint}</span>. Worth {t.worth} points.</div></div>
               <div className="act">{t.protected ? <span className="pill">New in town</span> : cool ? <span className="tiny">Again in <Countdown until={t.cooldown} onDone={load} /></span> :
-                <button className="btn sm danger" disabled={busy || !can} onClick={() => run("attack", { p_target: t.id }, r => { load(); showSheet({ verdict: r.won ? `+${r.war_pts} war points` : "You lost", tone: r.won ? "good" : "bad", title: `You hit ${r.name}`, story: pvpStory(r), cash: r.won ? r.cash : 0, lines: [r.won ? `+${r.xp} xp` : `${Math.ceil(r.secs / 60)} min in A&E. ${w.them.name} score a point.`], pic: <Avatar seed={t.id} look={t.look} /> }); })}>Attack</button>}</div>
+                <button className="btn sm danger" disabled={busy || !can} onClick={() => startFight(t.id)}>Attack</button>}</div>
             </div>); })}</div>
         </Panel>
         <div className="stack">

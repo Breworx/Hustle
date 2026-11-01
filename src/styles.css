@@ -496,3 +496,38 @@ a.btn{text-decoration:none}
 .warscore .bar i{display:block;height:100%;background:var(--seaglass)}
 .crewmark.enemy{color:var(--brick)}
 @media (max-width:560px){.warscore>.body{grid-template-columns:1fr 1fr}.warscore .mid{grid-column:1/-1;order:3}.warscore .crewmark.lg{min-width:48px;height:48px;font-size:15px}.warscore .big{font-size:26px}}
+
+/* ---- Armoury and fights ---- */
+.linkish{background:none;border:0;padding:0;color:var(--signal);text-decoration:underline;text-underline-offset:2px;font:inherit}
+.track.carry,.track.hp{height:8px;border-radius:4px;background:var(--deck-3);overflow:hidden}
+.track.hp{height:10px;border-radius:5px;margin-top:6px}
+.track .fill{height:100%;transition:width .35s ease}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.slot{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:12px;border-radius:var(--r-panel);border:1px dashed var(--rope-2);background:none;text-align:left;color:inherit;min-width:0}
+.slot.full{border-style:solid;background:var(--deck-2)}
+.slot.open{border-color:var(--sodium);box-shadow:0 0 0 1px var(--sodium) inset}
+.slot .sl{font-size:12.5px;color:var(--mist);margin-top:6px}
+.slot b{font-size:14.5px;line-height:1.25}
+.slot .tiny.bad{color:var(--brick)}
+.thumb.empty{color:var(--mist-2);border-style:dashed}
+.thumb.empty svg{width:20px;height:20px}
+.picker{margin-top:12px;border-top:1px solid var(--rope);padding-top:4px}
+.picker .li{padding-left:0;padding-right:0}
+.picker .act{display:flex;gap:6px}
+.fighters{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+.fighter{display:flex;gap:12px;align-items:center;min-width:0}
+.fighters .vs{font-family:var(--story);font-style:italic;color:var(--mist);font-size:18px}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.moves{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.move{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:var(--r-panel);border:1px solid var(--rope);background:var(--deck-2);text-align:left;color:inherit;min-width:0}
+.move:hover:not(:disabled){border-color:var(--brick);background:var(--brick-soft)}
+.move:disabled{opacity:.5;cursor:default}
+.move .grow{display:flex;flex-direction:column;min-width:0}
+.move.flee:hover:not(:disabled){border-color:var(--signal);background:transparent}
+.fightlog{list-style:none;margin:0;padding:0;max-height:420px;overflow:auto}
+.fightlog li{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:10px 16px;border-bottom:1px solid var(--rope)}
+.fightlog li:last-child{border-bottom:0}
+.fightlog .step{font-size:12px;color:var(--mist-2);padding-top:2px}
+.fightlog p{margin:0 0 3px;font-family:var(--story);font-size:15.5px;line-height:1.45}
+.fightlog p.theirs{color:var(--mist)}
+@media (max-width:560px){.fighters{grid-template-columns:1fr}.fighters .vs{display:none}.slots{grid-template-columns:1fr 1fr}.moves{grid-template-columns:1fr}}
