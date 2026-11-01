@@ -1,0 +1,88 @@
+// Jobs, fighters, districts and the stories told about them.
+import {SKIN} from "./catalog.js";
+const DISTRICTS=[
+ {id:"water",n:"Waterfront",lvl:1,fare:30,seed:7,sky:["#f4c84a","#e06a2a"],far:"#8a2a1c",near:"#1b1714",lamp:"#f2c23a",neon:"#4fe3ff",weather:"rain",blurb:"Ferries, food carts and tourists with fat wallets."},
+ {id:"old",n:"Old Town",lvl:4,fare:80,seed:23,sky:["#f0b84a","#b0386a"],far:"#5a1c3a",near:"#1b1714",lamp:"#f5c96a",neon:"#ff5fc8",weather:"rain",blurb:"Pawn shops, call centres and narrow brick lanes."},
+ {id:"docks",n:"The Docks",lvl:8,fare:150,seed:41,sky:["#e8b21f","#c3301f"],far:"#6a2410",near:"#1b1714",lamp:"#f2c23a",neon:"#ffb547",weather:"fog",blurb:"Containers, cranes and the casino on the pier."}
+];
+const CRIMES=[
+ {id:"bins",d:"any",n:"Rummage through bins",nv:1,base:92,min:0,max:12,lvl:1,xp:1,ic:"bin"},
+ {id:"shop",d:"water",n:"Shoplift from the dairy",nv:2,base:88,min:5,max:30,lvl:1,xp:2,ic:"bag"},
+ {id:"pick",d:"water",n:"Pickpocket ferry tourists",nv:3,base:74,min:20,max:85,lvl:1,xp:3,ic:"wallet"},
+ {id:"tag",d:"water",n:"Tag a billboard for a crew",nv:3,base:72,min:30,max:95,lvl:2,xp:4,ic:"spray"},
+ {id:"snk",d:"water",n:"Flog knock-off sneakers",nv:4,base:64,min:50,max:160,lvl:2,xp:5,ic:"sneaker"},
+ {id:"ute",d:"old",n:"Break into a parked ute",nv:5,base:56,min:120,max:420,lvl:4,xp:7,ic:"ute"},
+ {id:"scam",d:"old",n:"Run a phone scam",nv:6,base:50,min:200,max:620,lvl:5,xp:9,ic:"phone"},
+ {id:"pawn",d:"old",n:"Fence jewellery at the pawn shop",nv:7,base:44,min:300,max:950,lvl:6,xp:11,ic:"diamond"},
+ {id:"ware",d:"docks",n:"Warehouse job",nv:10,base:36,min:1000,max:3200,lvl:8,xp:18,ic:"crate"},
+ {id:"smug",d:"docks",n:"Smuggle a container",nv:12,base:30,min:2500,max:7000,lvl:10,xp:24,ic:"boat"},
+ {id:"vault",d:"docks",n:"Crack the casino vault",nv:15,base:22,min:5000,max:16000,lvl:12,xp:30,ic:"vault"}
+];
+const CRIME_LOOT={bins:["junk","food","plush","card","stamp"],shop:["food","use","junk","card"],pick:["junk","jewel","stamp","card"],tag:["junk","record","comic"],snk:["armour","junk","elec"],ute:["weapon","elec","junk","food"],scam:["elec","card"],pawn:["jewel","coin","figure","record"],ware:["elec","weapon","box","armour"],smug:["collect","box","fossil","figure"],vault:["coin","jewel","collect","fossil"]};
+const FOES=[
+ {d:"water",n:"Corner kid",p:20,cash:[20,90],xp:8,lvl:1,skin:SKIN[2],hat:"cap",shirt:"#d97bb3",bg:"#1c5568",grin:1,loot:["junk","plush","card","food"]},
+ {d:"water",n:"Nightclub bouncer",p:90,cash:[80,300],xp:18,lvl:2,skin:SKIN[3],hat:"bald",shirt:"#111",bg:"#12313f",shades:1,loot:["armour","use","food"]},
+ {d:"old",n:"Debt collector",p:260,cash:[250,800],xp:35,lvl:4,skin:SKIN[0],hat:"slick",shirt:"#4a3a5a",bg:"#5a2c54",scar:1,loot:["jewel","elec","record"]},
+ {d:"old",n:"Bikie enforcer",p:700,cash:[700,2200],xp:70,lvl:6,skin:SKIN[4],hat:"bandana",shirt:"#222",bg:"#2b1d36",beard:1,loot:["weapon","armour"]},
+ {d:"docks",n:"Dock boss",p:1800,cash:[2000,6000],xp:140,lvl:9,skin:SKIN[1],hat:"beanie",shirt:"#f2a33a",bg:"#7a3a14",beard:1,scar:1,loot:["collect","box","fossil"]},
+ {d:"docks",n:"The Kingpin",p:5000,cash:[8000,25000],xp:300,lvl:13,skin:SKIN[5],hat:"fedora",shirt:"#3a1414",bg:"#3a2014",chain:1,shades:1,grin:1,loot:["jewel","coin","collect","fossil"]}
+];
+
+/* ---------- item catalogue ---------- */
+const STORY={
+bins:{s:["Behind the fish market you find {cash} in loose coins and something that might be worth keeping.","A bin outside the bakery: day-old bread, a lost purse with {cash}, and a smell you will remember forever.","You dig through the skip behind the hardware store and come out with {cash} and grubby hands."],
+ f:["The seagulls got here first. They're not sharing.","Wet cardboard and broken dreams. Nothing else."],
+ j:["The council has started fining bin divers. Council officer {npc} is very proud that you're her first."],
+ h:["A rat the size of a cat disagrees with your being there."]},
+shop:{s:["You palm a pack of lollies while the owner argues with a kid about the price of a slushie. Outside, you count {cash} in loose change.","You time it with the bread delivery. Two loaves, a chocolate bar and {cash} from the counter tin. Nobody saw a thing.","The owner, {npc}, is glued to the cricket. You walk out with an armful of snacks and sell them on for {cash}."],
+ f:["The bell over the door rings at the worst moment. You put the chips back and buy one lolly to look normal.","{npc} the owner looks up every time you move. You leave with nothing but a strong sense of being watched."],
+ j:["You stuff a hot pie inside your jacket. It's very hot. You yelp, and the off-duty cop in the queue turns around.","The dairy has a new camera, and {npc} has already called it in. A patrol car is waiting at the corner."],
+ h:["The owner's sausage dog, who has a grudge, chases you three blocks and gets your ankle."]},
+pick:{s:["A tourist stops to photograph a seagull. You lift a wallet with {cash} inside and a ferry ticket to nowhere.","You bump into a man in a souvenir hat and apologise twice. He's {cash} lighter.","The 6:15 ferry is packed. By the time it docks you've collected {cash} and a laminated map of the harbour."],
+ f:["You go for a handbag and find a hand already on it. Its owner smiles at you. You walk away, fast.","The wallet you lift is empty apart from a library card and a photo of a cat."],
+ j:["The tourist you picked is an off-duty detective on holiday. She is not pleased.","Harbour security has been watching you for twenty minutes. {npc} from the ticket office points you out."],
+ h:["You slip on a chip wrapper on the wet boardwalk and go head-first into a bollard."]},
+tag:{s:["You finish the whole billboard before sunrise: a giant pigeon in sunglasses. {npc}'s crew pays you {cash}.","Up the ladder, a can in each hand. The crew's name in letters two metres tall. {cash}, cash on delivery.","You cover a real estate ad with something much better. The crew pays {cash}, and a passing bus driver honks."],
+ f:["The can runs dry halfway through the first letter. It now just says 'C'.","A rival crew is already up there. You decide tonight is not the night."],
+ j:["You're admiring your work from across the road when a patrol car pulls up. Your hands are bright pink.","{npc} owns the billboard. And, it turns out, the security company."],
+ h:["The ladder wasn't tied down. You land in a hedge, which helps less than you'd think."]},
+snk:{s:["You lay the 'Nikey Air' boxes out on a tarp at the market. They're gone in an hour and you're up {cash}.","A school kid buys four pairs and asks if you do bulk. {cash} and a new business contact.","{npc} haggles hard but you still clear {cash}. The left shoes are slightly bigger than the right ones. Nobody needs to know."],
+ f:["Rain soaks the boxes and the logos run. Nobody wants melting 'Abibas'.","A customer asks what they're made of. You don't know. Neither does she. No sale."],
+ j:["Your best customer is a trading standards officer with a clipboard and no sense of humour.","A market inspector asks for your stall permit. You offer him a pair of sneakers. Wrong answer."],
+ h:["An unhappy customer comes back with his mates and the left shoe. He throws it hard."]},
+ute:{s:["The ute's unlocked. Of course it is. A toolbox, a chilly bin and {cash} in the glovebox.","You pop the lock with a coat hanger in nine seconds flat. Stereo, tools and {cash} by morning.","{npc} left the keys in the sun visor. You take the gear from the tray and leave the dog, who seems relieved. {cash}."],
+ f:["The ute's alarm plays a full country song. You listen to the first verse, then leave.","Inside there's a dozen empty energy drink cans and a single jandal."],
+ j:["The ute belongs to a police dog handler. The dog is in the back. The dog is not friendly.","You're halfway through the window when the owner, {npc}, walks back with a pie and a phone already dialling 111."],
+ h:["The ute rolls backwards down the hill while you're still half inside it."]},
+scam:{s:["'Hello, this is your bank.' {npc} reads out every number on the card. {cash} gone before the kettle boils.","You sell {npc} a lifetime warranty on a toaster. Then the kettle. Then the toaster again. {cash} by lunch.","Forty calls, thirty-nine hang-ups and one very trusting grandson. {cash} in the account."],
+ f:["The person on the other end says 'Nice try' and reads out your own phone number.","{npc} keeps you on the line for forty minutes talking about her roses. You get nothing, but you know a lot about roses."],
+ j:["The 'grandmother' you've been calling is a fraud squad detective. She has been recording everything.","The call centre is raided mid-sentence. You finish the sentence in the back of a van."],
+ h:["Your landlord catches you behind on rent and throws your desk chair at you. You're still sitting in it."]},
+pawn:{s:["You slide a velvet bag across the counter. The owner squints, shrugs and counts out {cash}. No questions asked.","{npc} at the pawn shop has a terrible memory for faces. You leave with {cash} and a wink.","The ring's real, the paperwork isn't. The owner doesn't care. {cash}, in fifties."],
+ f:["The owner tests the gold with a magnet. It sticks. He slides it back without a word.","There's a cop browsing the guitars. You decide you're just here to look at guitars."],
+ j:["The necklace was reported stolen this morning. The owner already has the photo taped to his counter.","{npc} behind the counter is wearing a wire. You notice too late."],
+ h:["The owner's brother takes your fake diamond personally and shows you out through the window."]},
+ware:{s:["You cut the fence, find the right container and load the van in twenty minutes. Your fence pays {cash}.","The night guard, {npc}, is asleep in front of the rugby. You walk past him twice. {cash} worth of stock.","Forklift, pallet, van, gone. {cash}, and the forklift is still beeping when you leave."],
+ f:["The warehouse is full of plastic garden gnomes. Thousands of them. You leave them.","The guard dog patrol changes shift early. You climb back over the fence empty-handed."],
+ j:["The pallet was a police sting, packed with tracked phones. They knew your route before you did.","{npc} the guard is awake after all, and he has a very loud whistle."],
+ h:["A pallet of tinned peaches comes down off the top shelf. Onto you."]},
+smug:{s:["Container 947 slips through customs with its paperwork 'in order'. Your cut: {cash}.","{npc} at the port signs the manifest without looking up. By dawn the goods are gone and you're up {cash}.","The ship docks at 3am. Lights off, crane on, truck out. {cash}, and the harbour never noticed."],
+ f:["Customs pick this container for a random check. You walk away from it like it belongs to someone else.","The crane driver doesn't turn up. Nobody can lift a container by hand. You tried."],
+ j:["The sniffer dog checks your container, then sits down. It's carrying cheese, but you're the one in handcuffs.","{npc} from customs was never on the payroll. She was just patient."],
+ h:["A crane hook swings round at head height. You see it a second too late."]},
+vault:{s:["Three dials, two guards, one perfect night. The vault door swings open and you walk out with {cash}.","{npc} the pit boss owes you a favour. He looks the other way for exactly four minutes. {cash}.","You crack the vault by listening to the tumblers through a doctor's stethoscope. {cash}, and the stethoscope back where you found it."],
+ f:["The vault has a new time lock. It opens in eleven hours. You don't have eleven hours.","Someone wins big on roulette and every camera swings toward the floor. You bail."],
+ j:["The head of security, {npc}, was waiting inside the vault. She'd expected you for a week.","Every door in the casino locks at once. The only way out is past six guards and a very large man called {npc2}."],
+ h:["The guards catch you in the car park and you learn how hard casino carpet really is."]}
+};
+const BUSTSTORY={s:["You phone in a noise complaint two streets away. While the duty sergeant is on the call, you walk {npc} out the back door. They slip you {cash}.","A borrowed key, a squeaky gate and a very quiet corridor. {npc} is free and presses {cash} into your hand."],
+ f:["The cell door creaks. Loudly. You leave {npc} where they are.","{npc} won't stop talking. You give up before the guard notices."],
+ j:["The guard was only pretending to sleep. Now you're sharing a cell with {npc}.","You pick the lock perfectly. Then the door behind you clicks shut."]};
+const HSTORY={clean:["Nine minutes, start to finish. Every guard change called, the lock gave on the second try, and the car was rolling before the alarm went off.","Textbook. You walk out the front door in a borrowed uniform while security chases a decoy two streets away."],
+ partial:["The getaway car stalls at the lights. You run for it with one bag and leave the rest in the boot.","A bag splits going over the fence. Banknotes everywhere. You keep what you can carry."],
+ caught:["The lock was fine. The silent alarm wasn't. Officers are waiting at both exits.","You're inside when the lights come on. All of them."],
+ abort:["The scout spots an unmarked van across the road. The same van as yesterday. You call it off.","Too many guards, too much light. Some nights you just go home."]};
+const BOXSTORY=["You prise the lid off with a screwdriver.","Inside, wrapped in newspaper from 1998:","The lock gives with a satisfying clunk.","You shake it, listen, then open it."];
+const BOTTLESTORY=["The note inside, in faded pencil, says: 'Sorry about the boat.' Rolled up with it is something worth keeping.","It's a love letter from 1962, signed 'Forever, M'. Something is tucked inside.","The note says 'HELP' and, underneath, 'never mind, all good'. There's a gift too."];
+const MAPSTORY=["You follow the old map to a crumbling wall under the third pier. Behind a loose brick: a tin with one coin in it.","The X marks a spot behind the Old Town clock tower. You dig very quietly. Something glints."];
+export{DISTRICTS,CRIMES,CRIME_LOOT,FOES,STORY,BUSTSTORY,BOXSTORY,BOTTLESTORY,MAPSTORY};
