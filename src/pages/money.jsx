@@ -181,7 +181,7 @@ function MarketItem({ id }) {
       <button className="btn ghost sm" style={{ alignSelf: "flex-start" }} onClick={() => go("market")}>Back to the market</button>
       <div className="row" style={{ gap: 16 }}>
         <ItemThumb id={id} lg />
-        <div className="grow"><div className="verdict small" style={{ color: RAR[it.r][1], fontWeight: 700 }}>{RAR[it.r][0]} {CATN[it.cat].toLowerCase()}</div><h1>{it.n}</h1><p className="muted">{it.d}{data?.origin_city ? ` From ${data.origin_city}.` : ""}</p>
+        <div className="grow"><div className="verdict small" style={{ color: RAR[it.r][1], fontWeight: 700 }}>{RAR[it.r][0]} {CATN[it.cat].toLowerCase()}</div><h1>{it.n}</h1><p className="muted">{it.d}</p>
           <p className="tiny">{cityFlag(city)}Market in {cityName(city)}{there ? ", where you are." : `. You're in ${cityName(me.city)}, so you can look but not buy.`}</p></div>
       </div>
       <div className="stats">

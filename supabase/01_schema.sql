@@ -3641,6 +3641,8 @@ begin
     select zone into oz from game.countries where iso = i.origin;
     select zone into cz from game.countries where iso = c.country;
     m := case when oz = cz then 0.55 + 0.35 * u else 0.75 + 0.5 * u end;
+    -- Some countries just want certain kinds of thing more than others.
+    m := m * (0.8 + 0.45 * ('x' || substr(md5(i.cat || '/' || c.country), 1, 7))::bit(28)::int / 268435456.0);
     if i.cat = 'contraband' then m := m * 1.25; end if;
   end if;
   return greatest(1, floor(i.value * m));
