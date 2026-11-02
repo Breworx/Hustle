@@ -41,13 +41,17 @@ export const VEHICLES = [
   { id: "seaplane", n: "A seaplane", price: 30000000, lvl: 24, blurb: "Lands on the harbour, takes off from anywhere, and the coastguard can't keep up.", perks: { travel_time: 0.75, travel_free: true, job: 6, heat: 0.25, mug: 0.2 } },
   { id: "jet", n: "A private jet", price: 75000000, lvl: 28, blurb: "Wheels up whenever you say. Customs is a formality.", perks: { travel_time: 0.8, travel_free: true, job: 7, heat: 0.3, mug: 0.25 } },
   { id: "sub", n: "A private submarine", price: 160000000, lvl: 33, blurb: "Nobody follows you underwater. Nobody even knows you've left.", perks: { travel_time: 0.85, travel_free: true, job: 8, heat: 0.4, mug: 0.3 } },
+  { id: "stealthheli", n: "A stealth helicopter", price: 350000000, lvl: 45, blurb: "Matte black, whisper quiet, and invisible to the radar at the airport.", perks: { travel_time: 0.88, travel_free: true, travel_fast: true, job: 9, heat: 0.45, mug: 0.35 } },
+  { id: "cargoplane", n: "A cargo plane", price: 800000000, lvl: 58, blurb: "Four engines and a hold you could park a house in. Customs never quite know what's in it.", perks: { travel_time: 0.9, travel_free: true, travel_fast: true, job: 10, heat: 0.5, mug: 0.4 } },
+  { id: "supersonic", n: "A supersonic jet", price: 2000000000, lvl: 72, blurb: "London to Greyhaven before the champagne goes flat.", perks: { travel_time: 0.92, travel_free: true, travel_fast: true, job: 11, heat: 0.55, mug: 0.45 } },
+  { id: "spaceplane", n: "A suborbital spaceplane", price: 6000000000, lvl: 88, blurb: "Up past the sky, down anywhere on Earth in under an hour.", perks: { travel_time: 0.95, travel_free: true, travel_fast: true, job: 12, heat: 0.6, mug: 0.5 } },
 ];
 
 // ---------- Medals: earned automatically as your numbers grow. Any medal you hold can be worn as your title.
 // Each entry: the stat it watches, the thresholds, and a name for each threshold.
 export const MEDAL_SETS = [
-  { stat: "level", what: n => `Reach level ${n}`, at: [2, 5, 10, 15, 20, 25, 30, 35, 40],
-    names: ["Off the street", "Known face", "Somebody", "Made", "Big shot", "Heavyweight", "Legend", "Myth", "The Last Word"] },
+  { stat: "level", what: n => `Reach level ${n}`, at: [2, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 100],
+    names: ["Off the street", "Known face", "Somebody", "Made", "Big shot", "Heavyweight", "Legend", "Myth", "The Last Word", "Half way to the top", "Old money", "The Establishment", "Untouchable", "One of a kind", "Owner of Greyhaven"] },
   { stat: "jobs", what: n => `Do ${n.toLocaleString("en-NZ")} job${n > 1 ? "s" : ""}`, at: [1, 10, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
     names: ["First timer", "Petty thief", "Regular", "Hustler", "Grafter", "Professional", "Career criminal", "Old hand", "Mastermind", "Untouchable"] },
   { stat: "wins", what: n => `Win ${n.toLocaleString("en-NZ")} fight${n > 1 ? "s" : ""}`, at: [1, 10, 25, 50, 100, 250, 500, 1000],
@@ -58,9 +62,9 @@ export const MEDAL_SETS = [
     names: ["Magpie", "Hoarder", "Collector", "Curator", "Archivist", "Connoisseur", "Museum piece", "Treasure keeper", "Grand collector", "Owns one of everything"] },
   { stat: "legendary", what: n => `Own ${n} legendary item${n > 1 ? "s" : ""}`, at: [1, 3, 5, 10], names: ["Touched gold", "Golden hands", "Midas", "Living legend"] },
   { stat: "oneofone", what: () => "Own an item that only has one copy", at: [1], names: ["One of One"] },
-  { stat: "home", what: n => `Live in home ${n} on the ladder`, at: [3, 6, 10, 14, 18, 22, 26, 28, 30, 31],
-    names: ["Roof over my head", "Wheels for walls", "Four walls", "Homeowner", "Harbour views", "Penthouse life", "Lord of the manor", "Skyline royalty", "Bridge troll", "Moonwalker"] },
-  { stat: "vehicle", what: n => `Own vehicle ${n} in the garage`, at: [2, 5, 8, 11, 13, 16], names: ["Two wheels", "Four wheels", "Muscle", "Getaway driver", "Airborne", "Silent running"] },
+  { stat: "home", what: n => `Live in home ${n} on the ladder`, at: [3, 6, 10, 14, 18, 22, 26, 28, 30, 31, 33, 35, 37, 39],
+    names: ["Roof over my head", "Wheels for walls", "Four walls", "Homeowner", "Harbour views", "Penthouse life", "Lord of the manor", "Skyline royalty", "Bridge troll", "Moonwalker", "Head in the clouds", "Underground royalty", "Head of state", "The city is mine"] },
+  { stat: "vehicle", what: n => `Own vehicle ${n} in the garage`, at: [2, 5, 8, 11, 13, 16, 18, 20], names: ["Two wheels", "Four wheels", "Muscle", "Getaway driver", "Airborne", "Silent running", "Heavy lifter", "Edge of space"] },
   { stat: "networth", what: n => `Be worth ${n >= 1e9 ? "$" + n / 1e9 + " billion" : n >= 1e6 ? "$" + n / 1e6 + " million" : "$" + n.toLocaleString("en-NZ")}`, at: [10000, 100000, 1e6, 1e7, 1e8, 1e9],
     names: ["Pocket money", "Comfortable", "Millionaire", "Multi-millionaire", "Tycoon", "Billionaire"] },
   { stat: "streak", what: n => `Keep a ${n}-day daily streak`, at: [3, 7, 14, 30, 60, 100, 365], names: ["Habit", "Weekly regular", "Fortnighter", "Monthly", "Committed", "Centurion", "Every single day"] },

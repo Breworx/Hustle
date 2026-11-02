@@ -14,7 +14,7 @@ const pc = x => Math.round(x * 100) + "%";
 
 // ---------------- Garage ----------------
 const CAR_ICON = { foot: Ic.Footprints, bike: Ic.Bike, scooter: Ic.Bike, moped: Ic.Bike, hatch: Ic.Car, ute: Ic.Truck, roadbike: Ic.Bike, muscle: Ic.CarFront,
-  suv: Ic.Truck, sports: Ic.CarFront, limo: Ic.Car, hyper: Ic.CarFront, heli: Ic.Plane, seaplane: Ic.Sailboat, jet: Ic.Plane, sub: Ic.Anchor };
+  suv: Ic.Truck, sports: Ic.CarFront, limo: Ic.Car, hyper: Ic.CarFront, heli: Ic.Plane, seaplane: Ic.Sailboat, jet: Ic.Plane, sub: Ic.Anchor , stealthheli: Ic.Plane, cargoplane: Ic.Plane, supersonic: Ic.PlaneTakeoff, spaceplane: Ic.Rocket };
 export function Garage() {
   const { me, run, busy, toast, showSheet } = useGame();
   const [d, setD] = useState(null);

@@ -16,7 +16,7 @@ const TYPE_ICON = { coffee: Ic.Coffee, carwash: Ic.Car, tattoo: Ic.Pencil, boxin
   couriers: Ic.Bike, pawnshop: Ic.HandCoins, locksmith: Ic.KeyRound, pizzeria: Ic.Pizza, sportsgoods: Ic.Target, removals: Ic.PackageOpen, mechanic: Ic.Wrench,
   pub: Ic.Beer, security: Ic.ShieldCheck, range: Ic.Crosshair, seafood: Ic.Fish, scrapyard: Ic.Recycle, taxi: Ic.CarTaxiFront, dojo: Ic.Swords, gallery: Ic.Palette,
   bailbonds: Ic.Gavel, brewery: Ic.Hop, hotel: Ic.Hotel, jeweller: Ic.Gem, haulage: Ic.Truck, military: Ic.Shield, casino: Ic.Dices, marina: Ic.Sailboat,
-  airline: Ic.Plane, developer: Ic.Building2, hospital: Ic.Hospital, bank: Ic.Landmark, shipping: Ic.Ship };
+  airline: Ic.Plane, developer: Ic.Building2, hospital: Ic.Hospital, bank: Ic.Landmark, shipping: Ic.Ship, arms: Ic.Crosshair, satellite: Ic.Globe, pharma: Ic.Stethoscope, wealthfund: Ic.Banknote, spaceco: Ic.Rocket, conglomerate: Ic.Crown };
 
 // ---------------- Companies ----------------
 export function Companies() {

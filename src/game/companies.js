@@ -51,4 +51,11 @@ export const COMPANIES = [
   { id: "hospital", n: "Private hospital", cost: 100000000, lvl: 34, base: 60000, perk: "hosp", max: 0.6, blurb: "Surgeons on call and a wing nobody else can get into. Staff are up and about in no time." },
   { id: "bank", n: "Private bank", cost: 150000000, lvl: 37, base: 80000, perk: "listings", max: 25, blurb: "Numbered accounts, marble floors and no questions. Staff trade on a whole other level." },
   { id: "shipping", n: "Shipping line", cost: 250000000, lvl: 40, base: 120000, perk: "carry", max: 12, blurb: "Container ships in every port in the Pacific. Staff carry whatever they like." },
+  // ---- The very top
+  { id: "arms", n: "Arms manufacturer", cost: 500000000, lvl: 48, base: 200000, perk: "arms", max: 0.5, blurb: "Factories, export licences and very discreet customers. Staff buy from the armoury at cost." },
+  { id: "satellite", n: "Satellite network", cost: 1200000000, lvl: 56, base: 380000, perk: "travel_time", max: 0.6, blurb: "Forty satellites watching every road and port. Staff always know the fastest way through." },
+  { id: "pharma", n: "Pharmaceutical giant", cost: 3000000000, lvl: 64, base: 700000, perk: "hosp", max: 0.6, blurb: "Labs, patents and a cure for most things, at a price. Staff heal fastest of anyone." },
+  { id: "wealthfund", n: "Sovereign wealth fund", cost: 8000000000, lvl: 74, base: 1500000, perk: "listings", max: 40, blurb: "A country's savings, managed by you. Staff trade on a scale nobody else can." },
+  { id: "spaceco", n: "Space launch company", cost: 20000000000, lvl: 85, base: 3200000, perk: "carry", max: 20, blurb: "Rockets, a launch pad on the coast and a waiting list of governments. Staff carry like it's zero gravity." },
+  { id: "conglomerate", n: "The Greyhaven Conglomerate", cost: 60000000000, lvl: 96, base: 8000000, perk: "job", max: 15, blurb: "It owns a piece of everything in the city. Staff get a piece of everything too." },
 ];

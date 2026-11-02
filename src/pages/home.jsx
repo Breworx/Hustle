@@ -14,9 +14,10 @@ export const HOME_ICON = { rough: Ic.DoorOpen, box: Ic.Package, tent: Ic.Tent, s
   student: Ic.GraduationCap, bedsit: Ic.Bed, boarding: Ic.DoorClosed, flat: Ic.Armchair, container: Ic.Container, unit: Ic.House, townhouse: Ic.HousePlus,
   villa: Ic.Trees, houseboat: Ic.Anchor, apartment: Ic.Building, loft: Ic.Warehouse, bungalow: Ic.Mountain, penthouse: Ic.Hotel, gated: Ic.Fence,
   mansion: Ic.Castle, vineyard: Ic.Grape, estate: Ic.TreePalm, lodge: Ic.MountainSnow, yacht: Ic.Ship, castle: Ic.Crown, tower: Ic.Building2,
-  lighthouse: Ic.Waves, bridge: Ic.Landmark, moon: Ic.Rocket };
+  lighthouse: Ic.Waves, bridge: Ic.Landmark, moon: Ic.Rocket, bunker: Ic.Shield, airship: Ic.Cloud, arcology: Ic.Building2, palace: Ic.Gem,
+  station: Ic.Rocket, mayor: Ic.Landmark, marsbase: Ic.Globe, greyhaven: Ic.Crown };
 // Groups along the ladder, by position (1-based, inclusive).
-export const HOME_STAGES = [["The street", 1, 6], ["A roof, sort of", 7, 12], ["Moving up", 13, 19], ["Serious money", 20, 25], ["Legend", 26, 31]];
+export const HOME_STAGES = [["The street", 1, 6], ["A roof, sort of", 7, 12], ["Moving up", 13, 19], ["Serious money", 20, 25], ["Legend", 26, 31], ["Beyond", 32, 39]];
 export { perkList, dailyText };
 
 export function Home() {

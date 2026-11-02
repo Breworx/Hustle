@@ -60,6 +60,8 @@ export const VEHICLE_TRAVEL = {
   limo: { kph: 90, cap: 25, fuel: 0.35 }, hyper: { kph: 125, cap: 6, fuel: 0.5 },
   heli: { kph: 220, cap: 12, fuel: 3, air: true }, seaplane: { kph: 300, cap: 20, fuel: 4, air: true, scope: "both", range: 2500 },
   jet: { kph: 750, cap: 50, fuel: 8, air: true, scope: "both" }, sub: { kph: 40, cap: 120, fuel: 2, sea: true, scope: "both" },
+  stealthheli: { kph: 260, cap: 15, fuel: 4, air: true }, cargoplane: { kph: 600, cap: 200, fuel: 12, air: true, scope: "both" },
+  supersonic: { kph: 2000, cap: 30, fuel: 25, air: true, scope: "both" }, spaceplane: { kph: 6000, cap: 40, fuel: 60, air: true, scope: "both" },
 };
 
 // Travel gear: bought once, kept for good.

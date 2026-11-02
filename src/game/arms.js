@@ -23,11 +23,19 @@ export const SHOP_ARMS = [
   { id: "arm_hunting", n: "Hunting rifle", slot: "long", dmg: 76, acc: 80, ammo: "ammo_rifle", weight: 4.0, lvl: 16, price: 80000, sh: "rifle", c: "#6b4128", d: "Meant for deer in the Ureweras. Works on other things too." },
   { id: "arm_assault", n: "Assault rifle", slot: "long", dmg: 32, acc: 72, shots: 3, ammo: "ammo_rifle", weight: 3.6, lvl: 20, price: 200000, sh: "smg", c: "#2f3a2a", d: "Military surplus that should never have been surplus." },
   { id: "arm_lmg", n: "Light machine gun", slot: "long", dmg: 30, acc: 62, shots: 5, ammo: "ammo_rifle", weight: 8.0, lvl: 30, price: 1500000, sh: "rifle", c: "#111", d: "Heavy, hungry for ammo, and impossible to argue with." },
+  // ---- Top-tier weapons (level 40 and up)
+  { id: "arm_monoblade", n: "Monomolecular blade", slot: "melee", dmg: 48, acc: 86, weight: 0.6, lvl: 50, price: 25000000, sh: "knife", c: "#bfe3ff", d: "An edge one molecule wide. It cuts through things that shouldn't cut." },
+  { id: "arm_railpistol", n: "Prototype rail pistol", slot: "sidearm", dmg: 80, acc: 84, ammo: "ammo_rifle", weight: 1.6, lvl: 62, price: 90000000, sh: "pistol", c: "#6db7e8", d: "Magnets instead of gunpowder. Silent, brutal and not legal anywhere." },
+  { id: "arm_antimateriel", n: "Anti-materiel rifle", slot: "long", dmg: 150, acc: 78, ammo: "ammo_rifle", weight: 13, lvl: 45, price: 12000000, sh: "rifle", c: "#3a3a3a", d: "Built to stop vehicles. Heavy enough that you'll need the strength to carry it." },
+  { id: "arm_minigun", n: "Minigun", slot: "long", dmg: 34, acc: 60, shots: 8, ammo: "ammo_rifle", weight: 18, lvl: 70, price: 250000000, sh: "smg", c: "#111", d: "Eight rounds a turn, and a sound people remember for the rest of their lives." },
+  { id: "arm_plasma", n: "Plasma cutter", slot: "long", dmg: 190, acc: 82, ammo: "ammo_rifle", weight: 9, lvl: 88, price: 900000000, sh: "rifle", c: "#ff7a3d", d: "Meant for cutting ship hulls in the dry dock. Very much not meant for this." },
   // ---- Throwables (used up when thrown)
   { id: "arm_pepper", n: "Pepper spray", slot: "throw", effect: "blind", dmg: 4, acc: 90, weight: 0.1, lvl: 1, price: 120, sh: "can", c: "#e8664f", d: "Their aim is terrible for the next two turns." },
   { id: "arm_flash", n: "Flashbang", slot: "throw", effect: "stun", dmg: 6, acc: 85, weight: 0.4, lvl: 7, price: 1500, sh: "grenade", c: "#c9d3d6", d: "A bang and a flash. They lose their next turn." },
   { id: "arm_smoke", n: "Smoke grenade", slot: "throw", effect: "smoke", dmg: 0, acc: 100, weight: 0.4, lvl: 5, price: 900, sh: "grenade", c: "#748a88", d: "They can't see you. Their next two attacks will probably miss." },
   { id: "arm_molotov", n: "Molotov cocktail", slot: "throw", effect: "burn", dmg: 18, acc: 75, weight: 0.8, lvl: 11, price: 2500, sh: "bottle", c: "#ff7a3d", d: "Burns for two more turns after it lands." },
+  { id: "arm_emp", n: "EMP grenade", slot: "throw", effect: "stun", dmg: 12, acc: 92, weight: 0.5, lvl: 50, price: 400000, sh: "grenade", c: "#6db7e8", d: "Fries every gadget in the room. Also, briefly, everyone's nerves. They lose their next turn." },
+  { id: "arm_thermite", n: "Thermite charge", slot: "throw", effect: "burn", dmg: 45, acc: 80, weight: 1.0, lvl: 65, price: 1200000, sh: "grenade", c: "#ff7a3d", d: "Burns through steel. Burns for two more turns after it lands." },
   // ---- Armour
   { id: "arm_cap", n: "Baseball cap", slot: "head", def: 4, weight: 0.1, lvl: 1, price: 40, sh: "cap", c: "#e2574c", d: "Stops the sun. Not much else." },
   { id: "arm_riothelm", n: "Riot helmet", slot: "head", def: 30, weight: 1.6, lvl: 8, price: 7000, sh: "helmet", c: "#111", d: "Visor down, chin strap tight." },
@@ -41,6 +49,12 @@ export const SHOP_ARMS = [
   { id: "arm_jeans", n: "Work jeans", slot: "legs", def: 6, weight: 0.8, lvl: 1, price: 80, sh: "trousers", c: "#2a4a7a", d: "Double-stitched and nearly indestructible. Nearly." },
   { id: "arm_kneepads", n: "Riot leg guards", slot: "legs", def: 28, weight: 2.2, lvl: 8, price: 8000, sh: "trousers", c: "#111", d: "Shin and thigh plates that strap over your trousers." },
   { id: "arm_kevlegs", n: "Kevlar trousers", slot: "legs", def: 42, weight: 2.0, lvl: 15, price: 45000, sh: "trousers", c: "#2f3a2a", d: "Look like cargo pants. Aren't." },
+  { id: "arm_smarthelm", n: "Smart combat helmet", slot: "head", def: 65, weight: 1.6, lvl: 55, price: 15000000, sh: "helmet", c: "#273042", d: "Ballistic shell, a heads-up display and a camera that watches your back." },
+  { id: "arm_exosuit", n: "Powered exosuit", slot: "body", def: 72, weight: 6, lvl: 70, price: 200000000, sh: "riot", c: "#3a4a5a", d: "Carbon fibre and hydraulics. It carries itself, and most of what hits it." },
+  { id: "arm_graphene", n: "Graphene weave suit", slot: "body", def: 78, weight: 2.5, lvl: 90, price: 1500000000, sh: "jacket", c: "#111", d: "Looks like a nice suit. Stops a rifle round. Costs more than a hospital." },
+  { id: "arm_exogloves", n: "Exo gauntlets", slot: "hands", def: 45, weight: 0.8, lvl: 60, price: 8000000, sh: "gloves", c: "#3a4a5a", d: "Armoured, powered, and strong enough to bend a crowbar." },
+  { id: "arm_exolegs", n: "Exo leg frame", slot: "legs", def: 60, weight: 3.5, lvl: 66, price: 40000000, sh: "trousers", c: "#3a4a5a", d: "Armoured legs that carry the weight for you." },
+  { id: "arm_magboots", n: "Magnetic combat boots", slot: "feet", def: 50, weight: 1.6, lvl: 58, price: 10000000, sh: "boots", c: "#273042", d: "Armoured to the knee, and they'll stick to the side of a ship." },
   { id: "arm_steelcaps", n: "Steel-cap boots", slot: "feet", def: 12, weight: 1.8, lvl: 1, price: 180, sh: "boots", c: "#3a2014", d: "Required on every building site, and every good fight." },
   { id: "arm_tacboots", n: "Tactical boots", slot: "feet", def: 30, weight: 1.4, lvl: 12, price: 12000, sh: "boots", c: "#111", d: "Light, quiet and armoured at the toe and ankle." },
 ];
