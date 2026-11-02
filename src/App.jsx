@@ -22,6 +22,7 @@ import { Companies, Company, WarRoom } from "./pages/business.jsx";
 import { Armoury, Fight } from "./pages/armoury.jsx";
 import { Travel, MODE_ICON } from "./pages/travel.jsx";
 import { Property } from "./pages/property.jsx";
+import { Feedback, notePage } from "./pages/feedback.jsx";
 import { CountrySelect, guessCountry } from "./ui/country.jsx";
 import { Tutorial, PageHelp, useExplain, METER_HELP } from "./ui/help.jsx";
 import { newVersionLive } from "./lib/update.js";
@@ -166,7 +167,7 @@ function Banned({ b }) {
   );
 }
 
-const PAGES = { property: Property, travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { feedback: Feedback, property: Property, travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
@@ -175,7 +176,7 @@ function Shell() {
   const [base, ...rest] = route.split("?")[0].split("/");
   const Page = PAGES[base] || Street;
   const [open, setOpen] = useState(false);
-  useEffect(() => setOpen(false), [route]);
+  useEffect(() => { setOpen(false); notePage(base); }, [route]);
   return (
     <div className="shell">
       {open && <div className="railscrim" onClick={() => setOpen(false)} />}
@@ -196,6 +197,7 @@ function Shell() {
         ))}
         <div className="railfoot">
           {me.is_admin && <button className="navlink" aria-current={base === "admin" ? "page" : undefined} onClick={() => go("admin")}><Ic.ShieldCheck />Admin</button>}
+          <button className="navlink" aria-current={base === "feedback" ? "page" : undefined} onClick={() => go("feedback")}><Ic.MessageSquare />Feedback</button>
           <button className="navlink" aria-current={base === "account" ? "page" : undefined} onClick={() => go("account")}><Ic.User />Account</button>
         </div>
       </nav>

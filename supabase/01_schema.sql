@@ -306,6 +306,12 @@ alter table game.listings add column if not exists city text not null default 'h
 alter table game.sales add column if not exists city text not null default 'home';
 create index if not exists listings_city_item on game.listings (city, item_id, price);
 create index if not exists sales_city_item on game.sales (city, item_id, at desc);
+-- Player feedback. Anonymous rows have no player_id at all.
+create table if not exists game.feedback(id bigint generated always as identity primary key, kind text not null, body text not null, page text,
+  player_id uuid references game.players(id) on delete set null, player_name text, level int,
+  status text not null default 'new', note text, at timestamptz not null default now());
+create table if not exists game.feedback_rate(player_id uuid not null, at timestamptz not null default now());
+create index if not exists feedback_rate_player on game.feedback_rate (player_id, at);
 -- Places players own to rent out. A tenant is another player, or a local (npc) found when the place is advertised.
 create table if not exists game.rentals(id bigint generated always as identity primary key,
   owner uuid not null references game.players(id) on delete cascade, property text not null references game.properties(id),
@@ -318,7 +324,7 @@ create index if not exists rentals_market on game.rentals (listed) where tenant 
 create or replace function game.home_of(pid uuid) returns text language sql stable as $$
   select coalesce((select r.property from game.rentals r where r.tenant = pid), (select property from game.players where id = pid)) $$;
 do $$ declare t text; begin
-  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop','countries','rentals'] loop
+  foreach t in array array['careers','career_ranks','vehicles','medals','medals_earned','missions','seasons','season_points','season_claims','turf','arms','fights','cities','travel_modes','travel_gear','city_shop','countries','rentals','feedback','feedback_rate'] loop
     execute format('alter table game.%I enable row level security', t);
     execute format('revoke all on game.%I from public', t);
   end loop;
@@ -3701,6 +3707,49 @@ begin
     from (select city, count(*) n from game.listings group by city) z join game.cities c on c.id = z.city), '[]'));
 end $$;
 
+-- =====================================================================
+-- FEEDBACK
+-- =====================================================================
+-- Anonymous feedback really is anonymous: the row stores no player at all. A separate counter (with no link to the
+-- feedback) stops one person flooding the box. Players can choose to sign their feedback instead.
+create or replace function public.feedback_send(p_kind text, p_text text, p_page text default null, p_anon boolean default true) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; t text := btrim(coalesce(p_text, '')); recent int;
+begin
+  p := game.me();
+  if char_length(t) < 5 then raise exception 'Tell us a little more.'; end if;
+  if char_length(t) > 2000 then raise exception 'Keep it under 2,000 characters.'; end if;
+  if coalesce(p_kind, '') not in ('bug', 'idea', 'balance', 'love', 'other') then raise exception 'Pick what kind of feedback it is.'; end if;
+  delete from game.feedback_rate where at < now() - interval '1 day';
+  select count(*) into recent from game.feedback_rate where player_id = p.id and at > now() - interval '1 hour';
+  if recent >= 5 then raise exception 'Thanks! That''s plenty for one hour. Send more later.'; end if;
+  insert into game.feedback_rate(player_id) values (p.id);
+  insert into game.feedback(kind, body, page, player_id, player_name, level)
+    values (p_kind, t, left(p_page, 60), case when p_anon then null else p.id end, case when p_anon then null else p.name end, case when p_anon then null else p.level end);
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.admin_feedback(p_status text default 'new') returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare a game.players;
+begin
+  a := game.need_admin();
+  return jsonb_build_object('counts', (select jsonb_object_agg(status, n) from (select status, count(*) n from game.feedback group by status) z),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('id', f.id, 'kind', f.kind, 'body', f.body, 'page', f.page, 'at', f.at, 'status', f.status, 'note', f.note,
+      'player_id', f.player_id, 'player_name', f.player_name, 'level', f.level) order by f.id desc)
+      from (select * from game.feedback where status = coalesce(p_status, status) order by id desc limit 200) f), '[]'));
+end $$;
+
+create or replace function public.admin_feedback_set(p_id bigint, p_status text, p_note text default null) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare a game.players;
+begin
+  a := game.need_admin();
+  if p_status not in ('new', 'read', 'done') then raise exception 'Unknown status.'; end if;
+  update game.feedback set status = p_status, note = coalesce(p_note, note) where id = p_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -3714,7 +3763,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave','city_sell','city_trader','market_cities') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave','city_sell','city_trader','market_cities','feedback_send','admin_feedback','admin_feedback_set') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

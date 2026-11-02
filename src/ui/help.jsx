@@ -47,6 +47,7 @@ export const PAGE_HELP = {
   news: ["News", "Your notifications: sales, attacks, messages and everything else that happened to you."],
   account: ["Account", "Your country, your look, light or dark mode, and the tutorial."],
   admin: ["Admin", "Tools for running the game."],
+  feedback: ["Feedback", "Send the people making Hustle a bug report, an idea or anything else. You can send it anonymously."],
   fight: ["Fight", "A fight against another player. Each turn, pick a weapon, throw something or run. They answer straight after."],
   player: ["Profile", "Another player's profile. Attack, message or add them to your contacts from here."],
   company: ["Company", "A company's staff, wages, money and stars."],
@@ -83,15 +84,16 @@ export const TOUR = [
   { k: "done", page: "street", look: true, sel: ".page", t: "You'll do", d: "That's the tour. Collect your first-steps rewards on the Street, then go make a name for yourself. You can bring me back from your Account page any time. If anything's unclear, tap the ? up top." },
 ];
 const KEY = "hustle-tour";
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null") || { i: 0, off: false }; } catch (e) { return { i: 0, off: false }; } };
+// Old hands (level 8+) don't get the tour unless they ask for it from Account.
+const load = lvl => { try { return JSON.parse(localStorage.getItem(KEY) || "null") || { i: 0, off: (lvl || 0) >= 8 }; } catch (e) { return { i: 0, off: (lvl || 0) >= 8 }; } };
 const save = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} };
 export function restartTour() { save({ i: 0, off: false }); window.dispatchEvent(new Event("hustle-tour")); }
 
 export function Tutorial() {
   const { me } = useGame();
   const route = useRoute(); const base = route.split("?")[0].split("/")[0] || "street";
-  const [s, setS] = useState(load); const [min, setMin] = useState(false);
-  useEffect(() => { const f = () => setS(load()); window.addEventListener("hustle-tour", f); return () => window.removeEventListener("hustle-tour", f); }, []);
+  const [s, setS] = useState(() => load(me.level)); const [min, setMin] = useState(false);
+  useEffect(() => { const f = () => setS(load(0)); window.addEventListener("hustle-tour", f); return () => window.removeEventListener("hustle-tour", f); }, []);
   const set = n => { save(n); setS(n); };
   const done = me.guide?.done || {};
   // Skip past anything you've already done.

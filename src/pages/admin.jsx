@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useGame } from "../state.jsx";
 import { Panel, Avatar, Empty, Seg, Name } from "../ui/ui.jsx";
+import { FeedbackInbox } from "./feedback.jsx";
 import { call } from "../lib/supabase.js";
 import { money, num, ago } from "../lib/format.js";
 import { go } from "../lib/nav.js";
@@ -16,8 +17,8 @@ export function Admin() {
   return (
     <div className="page">
       <div className="pagehead"><div><h1>Admin</h1><p>Everything you do here is recorded in the admin log.</p></div>
-        <Seg label="Admin" value={tab} onChange={setTab} options={[["overview", "Overview"], ["players", "Players"], ["reports", "Reports"]]} /></div>
-      {tab === "overview" ? <Overview /> : tab === "players" ? <PlayerTools /> : <Reports />}
+        <Seg label="Admin" value={tab} onChange={setTab} options={[["overview", "Overview"], ["players", "Players"], ["reports", "Reports"], ["feedback", "Feedback"]]} /></div>
+      {tab === "overview" ? <Overview /> : tab === "players" ? <PlayerTools /> : tab === "feedback" ? <FeedbackInbox /> : <Reports />}
     </div>
   );
 }
