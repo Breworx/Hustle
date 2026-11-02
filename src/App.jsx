@@ -24,6 +24,7 @@ import { Travel, MODE_ICON } from "./pages/travel.jsx";
 import { Property } from "./pages/property.jsx";
 import { CountrySelect, guessCountry } from "./ui/country.jsx";
 import { Tutorial, PageHelp, useExplain, METER_HELP } from "./ui/help.jsx";
+import { newVersionLive } from "./lib/update.js";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
@@ -201,6 +202,7 @@ function Shell() {
       <div className="main">
         <Topbar onMenu={() => setOpen(true)} />
         <main className="content">
+          <UpdateBanner />
           <StatusBanner />
           <Page arg={rest.join("/")} key={route} />
         </main>
@@ -260,6 +262,20 @@ function Topbar({ onMenu }) {
       </div>
     </header>
   );
+}
+
+// "A new version is ready": checked every few minutes and whenever you come back to the app.
+function UpdateBanner() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const check = () => newVersionLive().then(v => v && setReady(true));
+    const t = setInterval(check, 5 * 60 * 1000);
+    const vis = () => document.visibilityState === "visible" && check();
+    document.addEventListener("visibilitychange", vis); check();
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+  }, []);
+  if (!ready) return null;
+  return <div className="banner travel"><Ic.Sparkles /><span className="grow"><b>A new version of Hustle is ready.</b> Tap update to get it.</span><button className="btn sm" onClick={() => location.reload()}>Update</button></div>;
 }
 
 function StatusBanner() {
