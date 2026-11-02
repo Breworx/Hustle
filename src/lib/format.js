@@ -1,6 +1,6 @@
 export const money = n => "$" + Math.floor(Number(n) || 0).toLocaleString("en-NZ");
 export const money2 = n => "$" + (Number(n) || 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-export const short = n => { n = Number(n) || 0; return n >= 1e6 ? "$" + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "m" : n >= 1e4 ? "$" + Math.round(n / 1e3) + "k" : money(n); };
+export const short = n => { n = Number(n) || 0; return n >= 1e9 ? "$" + (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + "b" : n >= 1e6 ? "$" + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "m" : n >= 1e4 ? "$" + Math.round(n / 1e3) + "k" : money(n); };
 export const num = n => (Number(n) || 0).toLocaleString("en-NZ");
 export const clock = ms => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s % 60).padStart(2, "0"); };
 export function ago(t) {

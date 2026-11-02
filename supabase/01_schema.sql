@@ -301,6 +301,10 @@ alter table game.players add column if not exists country text not null default 
 alter table game.players add column if not exists search_at timestamptz;
 -- Staff accounts play normally but stay out of the competition: hidden from rankings and lists, can't attack or be attacked.
 alter table game.players add column if not exists is_staff boolean not null default false;
+-- Invites: each player has a short code for their invite link. A new player can be invited by one other player.
+alter table game.players add column if not exists ref_code text unique;
+alter table game.players add column if not exists referred_by uuid references game.players(id) on delete set null;
+alter table game.players add column if not exists referral_paid boolean not null default false;
 -- Where things come from (for local goods), and which town each market listing is in.
 alter table game.items add column if not exists origin text;
 alter table game.items add column if not exists origin_city text;
@@ -434,12 +438,13 @@ begin
     if p.level % 2 = 0 then p.max_grit := p.max_grit + 1; end if;
     if p.level % 3 = 0 then p.max_mood := p.max_mood + 25; end if;
     perform game.notify(pid, 'level', case when p.level = 100 then 'Level 100. The top. There is nowhere higher in Greyhaven.' else format('You reached level %s. Health refilled.', p.level) end);
+    if p.level = 5 and p.referred_by is not null and not p.referral_paid then perform game.referral_pay(pid); p.referral_paid := true; end if;
     if p.level in (25, 50, 75, 100) then
       insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('%s just reached level %s.', p.name, p.level));
     end if;
   end loop;
   update game.players set xp = p.xp, level = p.level, max_health = p.max_health, health = p.health,
-    max_grit = p.max_grit, max_mood = p.max_mood where id = pid;
+    max_grit = p.max_grit, max_mood = p.max_mood, referral_paid = p.referral_paid where id = pid;
 end $$;
 
 -- Load the caller's row, lock it, and apply everything that happens with time passing.
@@ -545,7 +550,7 @@ begin
     tries := tries + 1; r := random(); pick := null;
     with wt as (select id, power(1 + boost, rarity) * coalesce(supply - minted, (array[6000,1200,200,30,5])[rarity + 1]) as w
                 from game.items
-                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token', 'war_trophy') and id not like 'arm\_%' and id not like 'ammo\_%' and id not like 'c\_%' and season is null and (supply is null or minted < supply)),
+                where (not use_cats or cat = any(cats)) and id not in ('founder', 'token', 'war_trophy', 'recruit_pin') and id not like 'arm\_%' and id not like 'ammo\_%' and id not like 'c\_%' and season is null and (supply is null or minted < supply)),
          cum as (select id, sum(w) over (order by id) cw, sum(w) over () tw from wt)
     select id into pick from cum where cw >= r * tw order by cw limit 1;
     if pick is not null then
@@ -587,7 +592,8 @@ create or replace function game.card(p game.players) returns jsonb language sql 
 -- public API (what the web app calls)
 -- =====================================================================
 drop function if exists public.create_player(text);
-create or replace function public.create_player(p_name text, p_country text default null) returns jsonb
+drop function if exists public.create_player(text, text);
+create or replace function public.create_player(p_name text, p_country text default null, p_ref text default null) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
 declare n text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')); fno int;
 begin
@@ -596,8 +602,16 @@ begin
   if char_length(n) < 3 or char_length(n) > 20 or n !~ '^[A-Za-z0-9 _.''-]+$' then
     raise exception 'Names are 3 to 20 letters, numbers, spaces, dots, dashes or apostrophes.'; end if;
   if exists (select 1 from game.players where lower(name) = lower(n)) then raise exception 'Someone on the street already goes by that name.'; end if;
-  insert into game.players(id, name, country) values (auth.uid(), n, coalesce((select iso from game.countries where iso = upper(p_country)), 'NZ'));
+  insert into game.players(id, name, country, referred_by) values (auth.uid(), n, coalesce((select iso from game.countries where iso = upper(p_country)), 'NZ'),
+    (select id from game.players where ref_code = upper(btrim(p_ref)) and p_ref is not null));
   perform game.give(auth.uid(), 'med', 1); perform game.give(auth.uid(), 'lager', 2); perform game.give(auth.uid(), 'pie', 1);
+  -- Invited by a friend: a head start, and the friend hears about it.
+  if exists (select 1 from game.players where id = auth.uid() and referred_by is not null) then
+    update game.players set cash = cash + 2000 where id = auth.uid();
+    perform game.give(auth.uid(), 'smallbox', 1);
+    perform game.notify((select referred_by from game.players where id = auth.uid()), 'invite',
+      format('%s joined Greyhaven with your invite. When they reach level 5 you both get a reward.', n));
+  end if;
   perform game.notify(auth.uid(), 'welcome', 'Welcome to the Waterfront. Try a job, hit the gym, and watch your back.');
   -- The first hundred characters each get a numbered Founder's key.
   update game.items set minted = minted + 1 where id = 'founder' and minted < supply returning minted into fno;
@@ -3755,6 +3769,46 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- =====================================================================
+-- INVITES
+-- =====================================================================
+-- Paid once, when someone you invited reaches level 5 (so throwaway accounts don't count). Both of you get something,
+-- and every fifth recruit earns the inviter a Recruiter's pin.
+create or replace function game.referral_pay(newbie uuid) returns void language plpgsql as $$
+declare r uuid; n int; nm text;
+begin
+  select referred_by, name into r, nm from game.players where id = newbie;
+  if r is null then return; end if;
+  select count(*) into n from game.players where referred_by = r and (referral_paid or id = newbie);
+  if n > 50 then return; end if;
+  update game.players set cash = cash + 25000 where id = r;
+  perform game.give(r, 'crate', 1);
+  perform game.give(r, 'token', 5);
+  update game.players set cash = cash + 10000 where id = newbie;
+  if n % 5 = 0 then perform game.give(r, 'recruit_pin', 1); end if;
+  perform game.notify(r, 'invite', format('%s reached level 5. Your reward: $25,000, a crate and 5 tokens%s.', nm, case when n % 5 = 0 then ', plus a Recruiter''s pin' else '' end));
+  perform game.notify(newbie, 'invite', 'Level 5! For joining with an invite, here''s an extra $10,000.');
+end $$;
+
+create or replace function public.invite_state() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; code text;
+begin
+  p := game.me();
+  if p.ref_code is null then
+    loop
+      code := translate(upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6)), '01', 'XY');
+      exit when not exists (select 1 from game.players where ref_code = code);
+    end loop;
+    update game.players set ref_code = code where id = p.id;
+  else code := p.ref_code; end if;
+  return jsonb_build_object('code', code,
+    'joined', (select count(*) from game.players where referred_by = p.id),
+    'rewarded', (select count(*) from game.players where referred_by = p.id and referral_paid),
+    'recruits', coalesce((select jsonb_agg(jsonb_build_object('id', x.id, 'name', x.name, 'level', x.level, 'look', x.look, 'paid', x.referral_paid, 'joined', x.created_at) order by x.created_at desc)
+      from game.players x where x.referred_by = p.id), '[]'));
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -3768,7 +3822,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave','city_sell','city_trader','market_cities','feedback_send','admin_feedback','admin_feedback_set') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave','city_sell','city_trader','market_cities','feedback_send','admin_feedback','admin_feedback_set','invite_state') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);

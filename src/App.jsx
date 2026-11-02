@@ -4,7 +4,7 @@ import { GameProvider, useGame } from "./state.jsx";
 import { Avatar, Countdown, Meter, Svg, ItemThumb, Name } from "./ui/ui.jsx";
 import { skyline, DISTRICT_ART } from "./game/art.js";
 import { rankOf } from "./game/catalog.js";
-import { money } from "./lib/format.js";
+import { money, short } from "./lib/format.js";
 import { go, useRoute, DISTRICT_NAMES } from "./lib/nav.js";
 import * as Ic from "./ui/icons.js";
 import { Street } from "./pages/street.jsx";
@@ -23,6 +23,8 @@ import { Armoury, Fight } from "./pages/armoury.jsx";
 import { Travel, MODE_ICON } from "./pages/travel.jsx";
 import { Property } from "./pages/property.jsx";
 import { Feedback, notePage } from "./pages/feedback.jsx";
+import { Invite, captureRef, pendingRef, clearRef } from "./pages/invite.jsx";
+captureRef();
 import { CountrySelect, guessCountry } from "./ui/country.jsx";
 import { Tutorial, PageHelp, useExplain, METER_HELP } from "./ui/help.jsx";
 import { newVersionLive } from "./lib/update.js";
@@ -31,7 +33,7 @@ export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
   { group: "Your life", items: [["home", "Home", Ic.Building], ["property", "Property", Ic.KeyRound], ["garage", "Garage", Ic.Car], ["career", "Career", Ic.Briefcase], ["companies", "Companies", Ic.Factory], ["medals", "Medals", Ic.Award], ["collection", "Collection", Ic.Gem]] },
   { group: "Money", items: [["stash", "Stash", Ic.Package], ["market", "Market", Ic.Store], ["exchange", "Exchange", Ic.ChartLine], ["store", "Corner store", Ic.ShoppingBag], ["bank", "Bank", Ic.Landmark], ["tokens", "Tokens", Ic.Coins]] },
-  { group: "People", items: [["crews", "Crews", Ic.Flag], ["war", "War room", Ic.Siren], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
+  { group: "People", items: [["invite", "Invite friends", Ic.Gift], ["crews", "Crews", Ic.Flag], ["war", "War room", Ic.Siren], ["messages", "Messages", Ic.Mail], ["chat", "Chat", Ic.MessageSquare], ["players", "Players", Ic.Users], ["ranks", "Rankings", Ic.Trophy]] },
   { group: "The city", items: [["map", "Map and turf", Ic.Map], ["travel", "Travel the country", Ic.Plane], ["event", "Events", Ic.PartyPopper], ["cells", "The Cells", Ic.Lock], ["ae", "A&E", Ic.HeartPulse]] }
 ];
 const TABS = [["street", "Street", Ic.House], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["market", "Market", Ic.Store]];
@@ -128,7 +130,7 @@ function CreateCharacter() {
   const [name, setName] = useState(""); const [err, setErr] = useState(""); const [busy, setBusy] = useState(false); const [country, setCountry] = useState(guessCountry);
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
-    try { const r = await call("create_player", { p_name: name, p_country: country }); await refresh();
+    try { const r = await call("create_player", { p_name: name, p_country: country, p_ref: pendingRef() }); clearRef(); await refresh();
       if (r.founder) showSheet({ verdict: `Founder #${r.founder}`, title: "You got here early", story: "You’re one of the first hundred people in Greyhaven. There’s a Founder’s key in your stash with your number on it, and a badge on your profile that nobody who comes later can ever get.", items: ["founder"], pic: <ItemThumb id="founder" /> }); } catch (x) { setErr(x.message); } finally { setBusy(false); }
   }
   return (
@@ -136,6 +138,7 @@ function CreateCharacter() {
       <form className="panel" onSubmit={submit}><div className="body stack">
         <div className="row"><Avatar seed={name || "new"} lg /><div><h1>Who are you?</h1><p className="muted">Pick the name people on the street will know you by. You can't change it later. The first hundred characters each get a numbered Founder's key.</p></div></div>
         <label className="field">Street name<input className="input" autoFocus maxLength={20} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Ghost" /></label>
+        {pendingRef() && <p className="tiny good"><Ic.Gift style={{ width: 14, verticalAlign: -2 }} /> A friend invited you, so you'll start with an extra $2,000 and a mystery box.</p>}
         <label className="field">Where you're from<CountrySelect value={country} onChange={setCountry} /><span className="tiny">Your travel map starts in your own country. Everyone shares the same home city, Greyhaven.</span></label>
         {err && <p className="err">{err}</p>}
         <button className="btn lg" disabled={busy || name.trim().length < 3}>Hit the street</button>
@@ -167,7 +170,7 @@ function Banned({ b }) {
   );
 }
 
-const PAGES = { feedback: Feedback, property: Property, travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
+const PAGES = { invite: Invite, feedback: Feedback, property: Property, travel: Travel, armoury: Armoury, fight: Fight, companies: Companies, company: Company, war: WarRoom, garage: Garage, career: Career, medals: Medals, missions: Missions, event: Event, home: Home, collection: Collection, crews: Crews, crew: CrewPage, messages: Messages, admin: Admin, tokens: Tokens, street: Street, jobs: Jobs, gym: Gym, fights: Fights, stash: Stash, market: Market, store: Store, bank: Bank, exchange: Exchange,
   map: CityMap, players: Players, player: Profile, cells: Cells, ae: AandE, chat: Chat, ranks: Rankings, news: News, account: Account };
 
 function Shell() {
@@ -250,7 +253,7 @@ function Topbar({ onMenu }) {
           <Avatar seed={me.id} look={me.look} />
           <span><b><Name p={{ ...me, crew_tag: state.crew?.tag }} /></b><span className="sub">{rankOf(me.level)}, level {me.level}</span></span>
         </button>
-        <div className="purse"><b>{money(me.cash)}</b><span>{me.city && me.city !== "home" ? (me.status === "road" ? `To ${me.trip?.to_name}` : me.trip?.to_name) : DISTRICT_NAMES[me.district]}</span></div>
+        <div className="purse"><b>{me.cash >= 1e8 ? short(me.cash) : money(me.cash)}</b><span>{me.city && me.city !== "home" ? (me.status === "road" ? `To ${me.trip?.to_name}` : me.trip?.to_name) : DISTRICT_NAMES[me.district]}</span></div>
         <div className="meters">
           <M k="stamina"><Meter label="Stamina" value={me.stamina} max={me.max_stamina} color="var(--stamina)" /></M>
           <M k="grit"><Meter label="Grit" value={me.grit} max={me.max_grit} color="var(--grit)" /></M>

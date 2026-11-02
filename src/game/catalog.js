@@ -348,6 +348,7 @@ const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx
  ...SHOP_ARMS.map(a=>({id:a.id,n:a.n,cat:a.def!=null?"armour":"weapon",r:a.price>=1000000?4:a.price>=100000?3:a.price>=10000?2:a.price>=1000?1:0,v:Math.round(a.price*0.6),
    sh:a.sh,c:a.c,c2:"",fx:a.def!=null?Math.round(a.def*0.8):Math.round((a.dmg||0)*(a.shots||1)*0.8),unlimited:true,d:a.d})),
  ...AMMO.map(a=>({id:a.id,n:a.n,cat:"use",r:0,v:Math.round(a.price/a.box*0.6*10)/10,sh:a.sh,c:a.c,c2:"",unlimited:true,d:a.d})),
+ {id:"recruit_pin",n:"Recruiter's pin",cat:"collect",r:3,v:40000,sh:"coin",c:"#e8664f",c2:"",unlimited:true,d:"Given for every fifth friend you bring to Greyhaven who sticks around. Wear it with pride, or sell it to someone with no friends."},
  {id:"war_trophy",n:"Crew war trophy",cat:"collect",r:3,v:50000,sh:"statue",c:"#e8664f",c2:"",unlimited:true,d:"Handed to everyone on the winning side of a crew war who landed a blow. The engraving lists the other crew's name, misspelled."},
  ...[...CITY_ITEMS,...WORLD_ITEMS].map(it=>({...it,unlimited:true,fx:it.arms?(it.arms.def!=null?Math.round(it.arms.def*0.8):Math.round(it.arms.dmg*(it.arms.shots||1)*0.8)):undefined})),
  ...SEASONS.flatMap(se=>se.items.map(it=>({cat:"collect",c2:"",fx:undefined,...it,season:se.id}))),

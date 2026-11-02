@@ -47,6 +47,7 @@ export const PAGE_HELP = {
   news: ["News", "Your notifications: sales, attacks, messages and everything else that happened to you."],
   account: ["Account", "Your country, your look, light or dark mode, and the tutorial."],
   admin: ["Admin", "Tools for running the game."],
+  invite: ["Invite friends", "Share your link. Friends who join start with extra cash, and when they reach level 5 you both get a reward."],
   feedback: ["Feedback", "Send the people making Hustle a bug report, an idea or anything else. You can send it anonymously."],
   fight: ["Fight", "A fight against another player. Each turn, pick a weapon, throw something or run. They answer straight after."],
   player: ["Profile", "Another player's profile. Attack, message or add them to your contacts from here."],

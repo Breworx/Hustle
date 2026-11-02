@@ -317,7 +317,7 @@ label.field{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(
 .pill.scarce{background:color-mix(in srgb,#f0a83a 16%,transparent);color:#f0b85a}
 :root[data-theme="light"] .pill.scarce{color:#9a5a06}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .pill.scarce{color:#9a5a06}}
-@media (max-width:1240px) and (min-width:961px){.meter .mh b .muted{display:none}}
+@media (max-width:1480px) and (min-width:961px){.meter .mh b .muted{display:none}}
 .legal p{max-width:68ch;color:var(--fog)}
 .legal{padding:24px 0 60px}
 a.btn{text-decoration:none}
@@ -598,3 +598,8 @@ a.btn{text-decoration:none}
 .li.fb{align-items:start}
 .fbbody{white-space:pre-wrap;line-height:1.5;margin-bottom:4px}
 textarea.input{min-height:120px;resize:vertical;font:inherit;line-height:1.5}
+.invitelink{font:600 15px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;padding:12px 14px;border-radius:var(--r-ctl);background:var(--deck-2);border:1px dashed var(--rope-2);word-break:break-all;user-select:all;-webkit-user-select:all}
+.tiny.good{color:var(--seaglass)}
+.meterbtn{min-width:0;overflow:hidden}
+.meter .mh span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter .mh b{white-space:nowrap;flex:none}
