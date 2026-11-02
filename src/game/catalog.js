@@ -343,8 +343,8 @@ function genItems(){
 const CAT=[...RAW.map(([id,n,cat,r,v,sh,c,c2,d,fx])=>({id,n,cat,r,v,sh,c,c2,d,fx})),...genItems(),
  // Never drops. Handed to the first 100 people who create a character, numbered in the order they arrived.
  // Bought with real money (or from other players on the market). Spent on refills and Regular status.
- {id:"token",n:"Token",cat:"use",r:2,v:1500,sh:"coin",c:"#f2c14e",c2:"",d:"Backstreet's premium currency. Spend tokens on refills and Regular status, or sell them to other players for cash."},
- {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Backstreet. There will never be another."},
+ {id:"token",n:"Token",cat:"use",r:2,v:1500,sh:"coin",c:"#f2c14e",c2:"",d:"Hustle's premium currency. Spend tokens on refills and Regular status, or sell them to other players for cash."},
+ {id:"founder",n:"Founder's key",cat:"collect",r:4,v:250000,sh:"key",c:"#f2c14e",c2:"",d:"Cut for the first hundred people to walk into Greyhaven. There will never be another."},
  ...SHOP_ARMS.map(a=>({id:a.id,n:a.n,cat:a.def!=null?"armour":"weapon",r:a.price>=1000000?4:a.price>=100000?3:a.price>=10000?2:a.price>=1000?1:0,v:Math.round(a.price*0.6),
    sh:a.sh,c:a.c,c2:"",fx:a.def!=null?Math.round(a.def*0.8):Math.round((a.dmg||0)*(a.shots||1)*0.8),unlimited:true,d:a.d})),
  ...AMMO.map(a=>({id:a.id,n:a.n,cat:"use",r:0,v:Math.round(a.price/a.box*0.6*10)/10,sh:a.sh,c:a.c,c2:"",unlimited:true,d:a.d})),

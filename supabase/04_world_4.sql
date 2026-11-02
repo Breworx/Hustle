@@ -1,4 +1,4 @@
--- BACKSTREET · step 4, part 4 of 4. Run after part 3.
+-- HUSTLE · step 4, part 4 of 4. Run after part 3.
 insert into game.city_shop(city,item_id,price,max_stock,restock_mins,stock) values
 ('al_vlore','w_al_vlore_s',8,50,2,50),
 ('al_vlore','w_al_vlore_c',218,20,8,20),

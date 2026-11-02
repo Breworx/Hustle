@@ -1,4 +1,4 @@
--- BACKSTREET · step 4, part 2 of 4. Run after part 1.
+-- HUSTLE · step 4, part 2 of 4. Run after part 1.
 insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season,origin,origin_city) values
 ('w_ng_benincity_f','Bag of coffee beans','food',0,38,0,'{"stamina":14}'::jsonb,false,null,null,'NG','ng_benincity'),
 ('w_ng_benincity_s','Benin City tram ticket','collect',0,45,0,'{}'::jsonb,false,null,null,'NG','ng_benincity'),

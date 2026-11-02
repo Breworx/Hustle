@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     const site = (Deno.env.get("SITE_URL") ?? req.headers.get("origin") ?? "").replace(/\/$/, "");
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      line_items: [{ quantity: 1, price_data: { currency: k.currency, unit_amount: k.price_cents, product_data: { name: `${k.tokens} Backstreet tokens` } } }],
+      line_items: [{ quantity: 1, price_data: { currency: k.currency, unit_amount: k.price_cents, product_data: { name: `${k.tokens} Hustle tokens` } } }],
       client_reference_id: user.id,
       metadata: { player_id: user.id, pack: k.id },
       customer_email: user.email,

@@ -55,7 +55,7 @@ export function Street() {
           <span className="pill" style={{ alignSelf: "flex-start", background: "#ffffff1f", color: "#fff" }}><Ic.MapPin />{DISTRICT_NAMES[d.id]}</span>
           <h1>{greeting()}, {me.name}.</h1>
           <p className="scene">{scene}</p>
-          {state.tower?.length > 0 && <p className="small" style={{ color: "#f2c14e", fontWeight: 600 }}>Lit up on Backstreet Tower tonight: {state.tower.join(" and ")}</p>}
+          {state.tower?.length > 0 && <p className="small" style={{ color: "#f2c14e", fontWeight: 600 }}>Lit up on Greyhaven Tower tonight: {state.tower.join(" and ")}</p>}
           <div className="row" style={{ flexWrap: "wrap", marginTop: 6 }}>
             <button className="btn" onClick={() => go("jobs")}><Ic.Briefcase />Find a job</button>
             <button className="btn ghost" onClick={() => go("fights")}><Ic.Swords />Pick a fight</button>

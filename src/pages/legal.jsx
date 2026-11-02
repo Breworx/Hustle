@@ -8,19 +8,19 @@ export function Legal() {
   return (
     <div className="content" style={{ maxWidth: 760, margin: "0 auto" }}>
       <div className="page legal">
-        <div className="pagehead"><div><h1>Terms, refunds and privacy</h1><p>Backstreet is run by {OPERATOR}. Questions: {CONTACT}.</p></div>
+        <div className="pagehead"><div><h1>Terms, refunds and privacy</h1><p>Hustle is run by {OPERATOR}. Questions: {CONTACT}.</p></div>
           <a className="btn ghost" href="#/street">Back to the game</a></div>
 
         <section className="panel"><div className="body stack-sm">
           <h2>Playing</h2>
-          <p>Backstreet is a free game. It's fiction: the crimes, fights and companies in it are made up, and nothing in it is advice about real money or real shares. Company prices follow the daily moves of real listed companies for fun only.</p>
+          <p>Hustle is a free game. It's fiction: the crimes, fights and companies in it are made up, and nothing in it is advice about real money or real shares. Company prices follow the daily moves of real listed companies for fun only.</p>
           <p>Play fair. One account per person. Don't use scripts or bots, exploit bugs, harass other players or post anything hateful or illegal in chat. We can suspend or close accounts that break these rules, and remove items or cash gained by cheating.</p>
           <p>We may change, rebalance or reset parts of the game, and we may close the game one day. If we close it, we'll give at least 30 days' notice in the game.</p>
         </div></section>
 
         <section className="panel"><div className="body stack-sm">
           <h2>Tokens and payments</h2>
-          <p>You can buy tokens with real money. Tokens are a licence to use a feature of the game. They're not money, have no cash value, can't be exchanged back for real money, and can only be used inside Backstreet. Trading tokens with other players for game cash is allowed. Selling them, or game items, for real money outside the game is not.</p>
+          <p>You can buy tokens with real money. Tokens are a licence to use a feature of the game. They're not money, have no cash value, can't be exchanged back for real money, and can only be used inside Hustle. Trading tokens with other players for game cash is allowed. Selling them, or game items, for real money outside the game is not.</p>
           <p>You must be 18 or over to buy tokens, or have a parent or guardian's permission. Payments are handled by Stripe. We never see or store your card details.</p>
           <p>Tokens are delivered to your stash as soon as Stripe confirms your payment. If they haven't arrived within an hour, contact us and we'll sort it out.</p>
         </div></section>

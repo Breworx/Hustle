@@ -1,4 +1,4 @@
--- BACKSTREET · step 4, part 3 of 4. Run after part 2.
+-- HUSTLE · step 4, part 3 of 4. Run after part 2.
 insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season,origin,origin_city) values
 ('w_al_vlore_s','Vlorë tea towel','collect',0,28,0,'{}'::jsonb,false,null,null,'AL','al_vlore'),
 ('w_al_vlore_c','Blown-glass ornament','collect',1,728,0,'{}'::jsonb,false,null,null,'AL','al_vlore'),

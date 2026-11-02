@@ -57,7 +57,7 @@ function SetupNeeded() {
     <div className="content" style={{ margin: "10vh auto", maxWidth: 640 }}>
       <div className="panel"><div className="body stack">
         <h1>Almost there</h1>
-        <p className="muted">This copy of Backstreet isn't connected to a database yet. In Vercel, open the project's Settings, then Environment Variables, and add <b>VITE_SUPABASE_URL</b> and <b>VITE_SUPABASE_ANON_KEY</b> from your Supabase project's API settings. Then redeploy.</p>
+        <p className="muted">This copy of Hustle isn't connected to a database yet. In Vercel, open the project's Settings, then Environment Variables, and add <b>VITE_SUPABASE_URL</b> and <b>VITE_SUPABASE_ANON_KEY</b> from your Supabase project's API settings. Then redeploy.</p>
       </div></div>
     </div>
   );
@@ -102,7 +102,7 @@ function Auth() {
     <div className="auth">
       <div className="art">
         <Svg svg={skyline(DISTRICT_ART.water)} /><div className="rain" /><div className="veil" />
-        <div className="in"><h1>Backstreet</h1><p>A harbour city that never sleeps. Pull jobs, build a crew of rivals and friends, trade on the market, and see who's still standing by morning.</p></div>
+        <div className="in"><h1>Hustle</h1><p>Greyhaven never sleeps. Pull jobs, build a crew, buy low and sell high from your home town to the other side of the world, and see who's still standing by morning.</p></div>
       </div>
       <form className="form" onSubmit={submit}>
         <h2>{mode === "in" ? "Sign in" : "Create your account"}</h2>
@@ -126,7 +126,7 @@ function CreateCharacter() {
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
     try { const r = await call("create_player", { p_name: name, p_country: country }); await refresh();
-      if (r.founder) showSheet({ verdict: `Founder #${r.founder}`, title: "You got here early", story: "You’re one of the first hundred people in Backstreet. There’s a Founder’s key in your stash with your number on it, and a badge on your profile that nobody who comes later can ever get.", items: ["founder"], pic: <ItemThumb id="founder" /> }); } catch (x) { setErr(x.message); } finally { setBusy(false); }
+      if (r.founder) showSheet({ verdict: `Founder #${r.founder}`, title: "You got here early", story: "You’re one of the first hundred people in Greyhaven. There’s a Founder’s key in your stash with your number on it, and a badge on your profile that nobody who comes later can ever get.", items: ["founder"], pic: <ItemThumb id="founder" /> }); } catch (x) { setErr(x.message); } finally { setBusy(false); }
   }
   return (
     <div className="content" style={{ margin: "8vh auto", maxWidth: 520 }}>
@@ -180,7 +180,7 @@ function Shell() {
       <nav className={`rail ${open ? "open" : ""}`} aria-label="Places">
         <button className="brand" onClick={() => go("street")}>
           <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 42V14q0-6 8-6h8" stroke="var(--mist-2)" strokeWidth="3.5" fill="none" strokeLinecap="round" /><ellipse cx="33" cy="9" rx="5.5" ry="2.8" fill="var(--sodium)" /><path d="M28.5 11L19 42h24z" fill="var(--sodium)" opacity=".25" /></svg>
-          <span><b>Backstreet</b><span>{state.online} on the street now</span></span>
+          <span><b>Hustle</b><span>{state.online} on the street now</span></span>
         </button>
         {NAV.map(g => (
           <div className="navgroup" key={g.group}>

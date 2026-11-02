@@ -1,5 +1,5 @@
 -- =====================================================================
--- BACKSTREET · multiplayer game database
+-- HUSTLE · multiplayer game database
 -- Step 1 of 3. Paste this whole file into Supabase → SQL Editor → Run.
 -- Safe to re-run: tables use IF NOT EXISTS, functions use OR REPLACE.
 --
@@ -1253,7 +1253,7 @@ begin
   if new_id is null then return jsonb_build_object('ok', true, 'duplicate', true); end if;
   perform game.give(p_player, 'token', k.tokens);
   update game.items set minted = minted + k.tokens where id = 'token';
-  perform game.notify(p_player, 'tokens', format('Payment received. %s tokens are in your stash. Thank you for supporting Backstreet.', k.tokens));
+  perform game.notify(p_player, 'tokens', format('Payment received. %s tokens are in your stash. Thank you for supporting Hustle.', k.tokens));
   return jsonb_build_object('ok', true, 'tokens', k.tokens);
 end $$;
 revoke all on function public.credit_purchase(text, uuid, text, int, text) from public;
@@ -1733,7 +1733,7 @@ begin
   if exists (select 1 from game.rentals where tenant = p.id) then perform game.home_apply(p.id); end if;
   if nw.price >= 8000000 and nw.sort > cur.sort then
     insert into game.messages(player_id, name, body) values (null, 'The Bugle',
-      case nw.id when 'tower' then format('%s just bought Backstreet Tower. Their name is going up on the skyline tonight.', p.name)
+      case nw.id when 'tower' then format('%s just bought Greyhaven Tower. Their name is going up on the skyline tonight.', p.name)
                  when 'yacht' then format('%s just bought the superyacht Nightjar. Mind the wake.', p.name)
                  when 'bridge' then format('%s just bought the Harbour Bridge. Yes, the whole thing. Tolls go up tomorrow.', p.name)
                  when 'moon' then format('%s just bought a penthouse on the Moon. Wave tonight. They can see you.', p.name)

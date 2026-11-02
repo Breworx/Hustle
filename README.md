@@ -1,6 +1,6 @@
-# Backstreet
+# Hustle
 
-A multiplayer crime game set in a rain-soaked harbour city. Pull jobs across six districts, train, fight locals and other players, run a crew, spring friends from the cells, collect and trade 1,000 limited items on a player market, climb from sleeping rough in a doorway to a penthouse on the Moon, and invest in eighteen companies whose prices follow real ones.
+A multiplayer crime and trading game set in Greyhaven, a rain-soaked harbour city. Pull jobs across six districts, train, fight locals and other players, run a crew, spring friends from the cells, collect and trade thousands of items on player markets, smuggle goods home from the other side of the world, climb from sleeping rough in a doorway to a penthouse on the Moon, and invest in eighteen companies whose prices follow real ones.
 
 Built with React and Vite, on Supabase (database, sign-in and live updates), hosted on Vercel.
 

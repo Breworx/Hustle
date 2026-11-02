@@ -1,4 +1,4 @@
-/* Backstreet · "Harbour at night"
+/* Hustle · "Harbour at night"
    Harbour water and sodium streetlight, not black and neon. One sans for the interface (Hanken Grotesk),
    one book serif for the stories (Newsreader). The district skyline is the one loud element; everything else is quiet.
    Radius follows hierarchy: 14px for page-level surfaces, 10px for panels, 7px for controls, 999px only for counters. */
@@ -429,7 +429,7 @@ a.btn{text-decoration:none}
 
 .crewhead .grow{flex:1 1 220px}
 
-/* Homes: the ladder from a doorway to Backstreet Tower */
+/* Homes: the ladder from a doorway to Greyhaven Tower */
 .homehero>.body{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
 .homehero .bigicon{width:96px;height:96px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--deck-2);border:1px solid var(--rope-2);color:var(--mist)}
 .homehero .bigicon svg{width:48px;height:48px}

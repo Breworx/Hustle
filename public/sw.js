@@ -1,4 +1,4 @@
-// Backstreet service worker: lets the game be installed to a home screen and open instantly.
+// Hustle service worker: lets the game be installed to a home screen and open instantly.
 // The game itself is always live, so only the app shell is cached; game data always comes from the server.
 const SHELL = "backstreet-shell-v1";
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(SHELL).then(c => c.addAll(["/", "/favicon.svg", "/icon-192.png"]))); });
