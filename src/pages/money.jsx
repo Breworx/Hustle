@@ -44,7 +44,7 @@ export function Stash() {
       <Panel flush>
         {items.length === 0 ? <Empty title={kinds ? "Nothing matches" : "Your stash is empty"}>{kinds ? "Try another filter." : "Jobs, fights and mystery boxes all turn up things worth keeping."}</Empty> :
         <div className="list">{items.map(x => { const it = IT[x.item_id]; const eq = me.weapon === it.id || me.armour === it.id; return (
-          <button key={it.id} className="li click" onClick={() => setOpen(it.id)}>
+          <button key={it.id} className="li click" data-tour={["lager", "pie", "med"].includes(it.id) ? "use" : undefined} onClick={() => setOpen(it.id)}>
             <ItemThumb id={it.id} />
             <div><div className="t">{it.n} {x.qty > 1 && <span className="muted">×{x.qty}</span>}</div><div className="s"><Rarity id={it.id} /> {CATN[it.cat]}{it.fx ? `, +${it.fx}% power` : ""}</div></div>
             <div className="act"><Scarce s={sup[it.id]} />{eq && <span className="pill good"><Ic.Check />Equipped</span>}<span className="tiny">{money(it.v)}</span></div>
@@ -83,7 +83,7 @@ function ItemSheet({ id, onClose }) {
         {mkt?.supply && <SupplyNote m={mkt} />}
         <div className="stack" style={{ padding: "8px 20px 20px" }}>
           {id === "token" && <button className="btn" onClick={() => { onClose(); go("tokens"); }}>Spend tokens</button>}
-          {id !== "token" && (canUse(id) || canEquip(id)) && <button className="btn" disabled={busy} onClick={use}>{canEquip(id) ? (eq ? "Unequip" : "Equip") : it.cat === "box" ? "Open it" : id === "oldmap" ? "Go digging" : id === "msgbottle" ? "Open the bottle" : "Use it"}</button>}
+          {id !== "token" && (canUse(id) || canEquip(id)) && <button className="btn" data-tour="use-btn" disabled={busy} onClick={use}>{canEquip(id) ? (eq ? "Unequip" : "Equip") : it.cat === "box" ? "Open it" : id === "oldmap" ? "Go digging" : id === "msgbottle" ? "Open the bottle" : "Use it"}</button>}
           <div className="panel" style={{ boxShadow: "none" }}><div className="body stack-sm">
             <b>Sell on the market in {cityName(me.city)}</b>
             <div className="tiny">{mkt ? (low ? `Cheapest listing here now: ${money(low)}.` : "Nobody's selling one here right now. Name your price.") : "Checking the market…"} Buyers pay a 3% fee on top.{me.city !== "home" ? " Your listing stays in this town, and buyers have to be here too." : ""}</div>

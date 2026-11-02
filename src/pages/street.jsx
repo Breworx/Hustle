@@ -44,7 +44,7 @@ export function Street() {
   const d = DISTRICTS.find(x => x.id === me.district) || DISTRICTS[0];
   const scene = useMemo(() => { const s = SCENES[d.id]; return s[Math.floor(Math.random() * s.length)]; }, [d.id]);
   const jobs = CRIMES.filter(c => (c.d === d.id || c.d === "any") && c.lvl <= me.level).slice(-3).reverse();
-  const xpPct = Math.min(100, (Number(me.xp) / Math.max(1, me.need_xp)) * 100);
+  const xpPct = me.need_xp ? Math.min(100, (Number(me.xp) / Math.max(1, me.need_xp)) * 100) : 100;
   return (
     <div className="page">
       <section className="hero">
@@ -70,7 +70,7 @@ export function Street() {
       <Goals />
 
       <div className="stats">
-        <div className="stat"><div className="k">Level {me.level}, {rankOf(me.level)}</div><div className="v">{num(Math.floor(me.xp))} <span className="muted small">/ {num(me.need_xp)} xp</span></div><div className="xpbar"><i style={{ width: xpPct + "%" }} /></div></div>
+        <div className="stat"><div className="k">Level {me.level}, {rankOf(me.level)}</div><div className="v">{num(Math.floor(me.xp))} <span className="muted small">{me.need_xp ? `/ ${num(me.need_xp)} xp` : "xp, the top level"}</span></div><div className="xpbar"><i style={{ width: xpPct + "%" }} /></div></div>
         <div className="stat"><div className="k">Net worth</div><div className="v">{short(me.networth)}</div></div>
         <div className="stat"><div className="k">In the bank</div><div className="v">{money(me.bank)}</div></div>
         <div className="stat"><div className="k">Fight power</div><div className="v">{num(me.power)}</div></div>

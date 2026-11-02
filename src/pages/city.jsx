@@ -12,6 +12,7 @@ import { bustStory, pvpStory } from "../game/stories.js";
 import * as Ic from "../ui/icons.js";
 import { useStartFight } from "./armoury.jsx";
 import { CountrySelect, flag, countryName } from "../ui/country.jsx";
+import { restartTour } from "../ui/help.jsx";
 
 const STATUS = { ok: ["Out and about", "good"], jail: ["In the cells", "warn"], hosp: ["In A&E", "bad"], travel: ["In a taxi", ""], road: ["On the road", ""], away: ["Out of town", ""] };
 const hasBlock = (holdings, t) => (holdings[t]?.shares || 0) >= (STOCKS.find(s => s.t === t)?.shares || 1e12);
@@ -292,6 +293,9 @@ export function Account() {
     <div className="page">
       <div className="pagehead"><div><h1>Account</h1><p>Signed in as {session.user.email}.</p></div>
         <button className="btn ghost" onClick={() => go("player/" + me.id)}>View my profile</button></div>
+      <Panel title="Tutorial" note="Sal walks you through the basics. Steps you've already done get skipped.">
+        <button className="btn ghost" onClick={() => { restartTour(); go("street"); }}>Start the tutorial again</button>
+      </Panel>
       <Panel title="Your country" note="Your travel map starts here, with Greyhaven placed inside it. You can change it when you're home.">
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><CountrySelect id="acct-country" value={country} onChange={setCountry} />
           <button className="btn" disabled={busy || country === me.country} onClick={() => run("country_set", { p_country: country }, r => toast(`Your country is now ${r.name}.`, "good"))}>Save</button></div>

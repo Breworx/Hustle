@@ -49,7 +49,7 @@ export function Jobs() {
               <div><div className="t">{j.n}</div><div className="s">{money(j.min)} to {money(j.max)}, {j.nv} grit, {j.xp} xp</div>{!locked && <Odds p={p} />}</div>
               <div className="act">{locked ? <span className="pill"><Ic.Lock />Level {j.lvl}</span> : <>
                 <span className="tiny">{Math.round(p)}% odds</span>
-                <button className="btn sm" disabled={busy || !free || me.grit < j.nv} onClick={() => doJob(j)}>Do it</button></>}</div>
+                <button className="btn sm" data-tour="job" disabled={busy || !free || me.grit < j.nv} onClick={() => doJob(j)}>Do it</button></>}</div>
             </div>); })}
         </div>
       </Panel>
@@ -83,7 +83,7 @@ export function Gym() {
           <div key={k} className="panel gcard">
             <div className="top"><Icon /><div><b>{label}</b><div className="tiny">{note}</div></div></div>
             <div className="v">{num(Math.floor(me[k]))}</div>
-            <button className="btn" disabled={busy || max < 1 || me.status !== "ok"} onClick={() => run("train", { p_stat: k, p_sets: sets }, r => toast(`${label} +${r.gain} over ${r.sets} set${r.sets > 1 ? "s" : ""}.`, "good"))}>Train {label.toLowerCase()}</button>
+            <button className="btn" data-tour="train" disabled={busy || max < 1 || me.status !== "ok"} onClick={() => run("train", { p_stat: k, p_sets: sets }, r => toast(`${label} +${r.gain} over ${r.sets} set${r.sets > 1 ? "s" : ""}.`, "good"))}>Train {label.toLowerCase()}</button>
           </div>
         ))}
       </div>
@@ -113,7 +113,7 @@ export function Fights() {
             <div key={f.n} className={`li ${locked ? "locked" : ""}`}>
               <Svg className="av" svg={npcFaceSvg(f)} />
               <div><div className="t">{f.n}</div><div className="s">Power {num(f.p)}, carries {money(f.cash[0])} to {money(f.cash[1])}</div>{!locked && <Odds p={p} />}</div>
-              <div className="act">{locked ? <span className="pill"><Ic.Lock />Level {f.lvl}</span> : <><span className="tiny">{p}% odds</span><button className="btn sm danger" disabled={busy || !can} onClick={() => fight(f)}>Fight</button></>}</div>
+              <div className="act">{locked ? <span className="pill"><Ic.Lock />Level {f.lvl}</span> : <><span className="tiny">{p}% odds</span><button className="btn sm danger" data-tour="fight" disabled={busy || !can} onClick={() => fight(f)}>Fight</button></>}</div>
             </div>); })}</div>
         </Panel>
       ) : <PlayersHere can={can} />}

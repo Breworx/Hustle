@@ -407,19 +407,28 @@ begin
   end if;
 end $$;
 
+-- Experience needed to go from one level to the next. Quick at first, then very steep: level 30 takes about 320,000 xp
+-- in total, level 100 (the top) about 28 million. Reaching 100 is meant to take a very long time.
+create or replace function game.need_xp(lvl int) returns numeric language sql immutable as $$
+  select round(100 * power(lvl, 1.5) * (1 + power(lvl / 30.0, 2))) $$;
+
 create or replace function game.gain_xp(pid uuid, x numeric) returns void language plpgsql as $$
 declare p game.players; need numeric;
 begin
   select * into p from game.players where id = pid for update;
   p.xp := p.xp + x;
   loop
-    need := round(100 * power(p.level, 1.5));
+    exit when p.level >= 100;
+    need := game.need_xp(p.level);
     exit when p.xp < need;
     p.xp := p.xp - need; p.level := p.level + 1;
     p.max_health := p.max_health + 10; p.health := p.max_health;
     if p.level % 2 = 0 then p.max_grit := p.max_grit + 1; end if;
     if p.level % 3 = 0 then p.max_mood := p.max_mood + 25; end if;
-    perform game.notify(pid, 'level', format('You reached level %s. Health refilled.', p.level));
+    perform game.notify(pid, 'level', case when p.level = 100 then 'Level 100. The top. There is nowhere higher in Greyhaven.' else format('You reached level %s. Health refilled.', p.level) end);
+    if p.level in (25, 50, 75, 100) then
+      insert into game.messages(player_id, name, body) values (null, 'The Bugle', format('%s just reached level %s.', p.name, p.level));
+    end if;
   end loop;
   update game.players set xp = p.xp, level = p.level, max_health = p.max_health, health = p.health,
     max_grit = p.max_grit, max_mood = p.max_mood where id = pid;
@@ -608,7 +617,7 @@ begin
   perform game.medal_check(p.id);
   return jsonb_build_object(
     'me', to_jsonb(p) || jsonb_build_object('status', game.status(p), 'power', round(game.power(p)),
-          'networth', game.networth(p.id), 'need_xp', round(100 * power(p.level, 1.5)),
+          'networth', game.networth(p.id), 'need_xp', case when p.level >= 100 then null else game.need_xp(p.level) end,
           'skill_levels', jsonb_build_object('thief', game.skill_lvl(p.skills,'thief'), 'fight', game.skill_lvl(p.skills,'fight'),
                                              'fit', game.skill_lvl(p.skills,'fit'), 'trade', game.skill_lvl(p.skills,'trade'))),
     'inventory', coalesce((select jsonb_agg(jsonb_build_object('item_id', item_id, 'qty', qty)) from game.inventory where player_id = p.id and qty > 0), '[]'),
@@ -1289,6 +1298,8 @@ create or replace function game.guide_steps() returns jsonb language sql immutab
     {"k":"travel","t":"Take a taxi somewhere","d":"Each district has its own jobs and trouble.","cash":500,"go":"map"},
     {"k":"market","t":"Buy or sell on the market","d":"Every listing is another player. Opens after your first day.","cash":500,"go":"market"},
     {"k":"stock","t":"Buy some shares","d":"Prices follow real companies every trading day.","cash":500,"go":"exchange"},
+    {"k":"fight_win","t":"Win a fight","d":"Pick a local your own size and take their cash.","cash":300,"go":"fights"},
+    {"k":"trip","t":"Take a trip out of Greyhaven","d":"Every town sells things you can''t get at home.","cash":1000,"go":"travel"},
     {"k":"crew","t":"Join or start a crew","d":"Crews share a chat, a vault and a reputation.","cash":1000,"go":"crews"}
   ]'::jsonb $$;
 

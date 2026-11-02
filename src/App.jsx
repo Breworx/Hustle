@@ -23,6 +23,7 @@ import { Armoury, Fight } from "./pages/armoury.jsx";
 import { Travel, MODE_ICON } from "./pages/travel.jsx";
 import { Property } from "./pages/property.jsx";
 import { CountrySelect, guessCountry } from "./ui/country.jsx";
+import { Tutorial, PageHelp, useExplain, METER_HELP } from "./ui/help.jsx";
 
 export const NAV = [
   { group: "On the street", items: [["street", "The Street", Ic.House], ["missions", "Missions", Ic.ScrollText], ["jobs", "Jobs", Ic.Briefcase], ["fights", "Fights", Ic.Swords], ["armoury", "Armoury", Ic.Crosshair], ["gym", "Gym", Ic.Dumbbell]] },
@@ -203,6 +204,7 @@ function Shell() {
           <StatusBanner />
           <Page arg={rest.join("/")} key={route} />
         </main>
+        <Tutorial />
       </div>
       <nav className="tabbar" aria-label="Main">
         {TABS.map(([k, l, Icon]) => <button key={k} aria-current={base === k ? "page" : undefined} onClick={() => go(k)}><Icon />{l}</button>)}
@@ -229,7 +231,8 @@ function badge(k, me, inv, state) {
 }
 
 function Topbar({ onMenu }) {
-  const { me, state } = useGame();
+  const { me, state } = useGame(); const explain = useExplain();
+  const M = ({ k, children }) => <button className="meterbtn" onClick={() => explain(METER_HELP[k])} aria-label={`What is ${METER_HELP[k][0].toLowerCase()}?`}>{children}</button>;
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || "");
   const flip = () => {
     const dark = theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
@@ -245,12 +248,13 @@ function Topbar({ onMenu }) {
         </button>
         <div className="purse"><b>{money(me.cash)}</b><span>{me.city && me.city !== "home" ? (me.status === "road" ? `To ${me.trip?.to_name}` : me.trip?.to_name) : DISTRICT_NAMES[me.district]}</span></div>
         <div className="meters">
-          <Meter label="Stamina" value={me.stamina} max={me.max_stamina} color="var(--stamina)" />
-          <Meter label="Grit" value={me.grit} max={me.max_grit} color="var(--grit)" />
-          <Meter label="Mood" value={me.mood} max={me.max_mood} color="var(--mood)" />
-          <Meter label="Health" value={me.health} max={me.max_health} color="var(--health)" />
-          <Meter label={me.heat >= 75 ? "Wanted" : "Heat"} value={me.heat} max={100} color="var(--heat)" />
+          <M k="stamina"><Meter label="Stamina" value={me.stamina} max={me.max_stamina} color="var(--stamina)" /></M>
+          <M k="grit"><Meter label="Grit" value={me.grit} max={me.max_grit} color="var(--grit)" /></M>
+          <M k="mood"><Meter label="Mood" value={me.mood} max={me.max_mood} color="var(--mood)" /></M>
+          <M k="health"><Meter label="Health" value={me.health} max={me.max_health} color="var(--health)" /></M>
+          <M k="heat"><Meter label={me.heat >= 75 ? "Wanted" : "Heat"} value={me.heat} max={100} color="var(--heat)" /></M>
         </div>
+        <PageHelp />
         <button className="iconbtn" onClick={() => go("news")} aria-label={`Notifications${state.unseen ? `, ${state.unseen} new` : ""}`}><Ic.Bell />{state.unseen > 0 && <span className="count">{state.unseen}</span>}</button>
         <button className="iconbtn" onClick={flip} aria-label="Switch light or dark">{(theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches) ? <Ic.Sun /> : <Ic.Moon />}</button>
       </div>

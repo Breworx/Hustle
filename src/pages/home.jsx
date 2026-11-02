@@ -57,7 +57,7 @@ export function Home() {
           <div className="grow" style={{ minWidth: 200 }}><b>{next.name}</b>
             <div className="xpbar" style={{ marginTop: 6 }}><i style={{ width: Math.min(100, (me.cash / Math.max(1, netFor(next))) * 100) + "%" }} /></div>
             <div className="tiny" style={{ marginTop: 4 }}>{me.cash >= netFor(next) ? "You can afford it now." : `${money(netFor(next) - me.cash)} to go. It costs ${money(netFor(next))} after selling your current place.`}</div></div>
-          <button className="btn" disabled={busy || me.level < next.lvl || me.cash < netFor(next) || me.status !== "ok"} onClick={() => move(next)}>Move in for {money(netFor(next))}</button>
+          <button className="btn" data-tour="home" disabled={busy || me.level < next.lvl || me.cash < netFor(next) || me.status !== "ok"} onClick={() => move(next)}>Move in for {money(netFor(next))}</button>
         </div>
       </Panel>}
 

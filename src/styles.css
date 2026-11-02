@@ -582,3 +582,16 @@ a.btn{text-decoration:none}
 .rentctl{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-left:60px}
 .big-money{font-size:20px;color:var(--seaglass)}
 @media (max-width:560px){.rentctl{padding-left:0}}
+
+/* ---- Tap-to-explain and the tutorial ---- */
+.meterbtn{background:none;border:0;padding:0;margin:0;text-align:left;color:inherit;font:inherit;min-width:0;cursor:pointer;display:block}
+.meterbtn:hover .meter .mh span{color:var(--fog)}
+.tour{position:fixed;right:20px;bottom:20px;z-index:60;width:min(380px,calc(100vw - 32px));background:var(--deck);border:1px solid var(--sodium);border-radius:var(--r-page);padding:14px 16px;box-shadow:0 20px 50px -20px #000a}
+.tour .story{font-size:15px}
+.tour-pill{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;align-items:center;gap:8px;padding:6px 14px 6px 6px;border-radius:999px;border:1px solid var(--sodium);background:var(--deck);color:var(--fog);font-weight:600;box-shadow:var(--shadow)}
+.tour-pill .av{width:30px;height:30px}
+.iconbtn.sm{width:28px;height:28px}
+.tour-glow{outline:3px solid var(--sodium)!important;outline-offset:3px;border-radius:var(--r-ctl);animation:tourpulse 1.6s ease-in-out infinite;position:relative;z-index:2}
+@keyframes tourpulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--sodium) 55%,transparent)}50%{box-shadow:0 0 0 10px transparent}}
+@media (prefers-reduced-motion:reduce){.tour-glow{animation:none}}
+@media (max-width:820px){.tour,.tour-pill{right:16px;bottom:calc(76px + env(safe-area-inset-bottom,0px))}}

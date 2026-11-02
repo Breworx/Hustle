@@ -356,6 +356,6 @@ Object.assign(SHP,ARMS_SHAPES,TRAVEL_SHAPES);
 const IT=Object.fromEntries(CAT.map(x=>[x.id,x]));
 const SHOPIDS=["med","drink","lager","flatwhite","pie","burner","charm","lotto"];
 const FILT=[["all","All",null],["gear","Gear",["weapon","armour"]],["val","Valuables",["jewel","collect","elec","fossil"]],["coll","Collectibles",["plush","figure","stamp","coin","card","record","comic"]],["use","Use",["use","food","box","contraband"]],["junk","Junk",["junk"]]];
-const RANKS=[[1,"Nobody"],[3,"Street rat"],[5,"Hustler"],[7,"Hood"],[9,"Soldier"],[11,"Enforcer"],[13,"Lieutenant"],[16,"Underboss"],[20,"Boss"],[25,"Kingpin"]];
+const RANKS=[[1,"Nobody"],[3,"Street rat"],[5,"Hustler"],[7,"Hood"],[9,"Soldier"],[11,"Enforcer"],[13,"Lieutenant"],[16,"Underboss"],[20,"Boss"],[25,"Kingpin"],[35,"Don"],[45,"Godfather"],[55,"Shadow"],[65,"Legend"],[75,"Myth"],[85,"Untouchable"],[95,"Ghost of Greyhaven"],[100,"Owner of Greyhaven"]];
 const rankOf=l=>{let r=RANKS[0][1];for(const[x,n]of RANKS)if(l>=x)r=n;return r};
 export{I,SHP,RAR,RW,CATN,CAT,IT,SHOPIDS,FILT,NAMES,HATS,SHIRTS,BGS,SKIN,LBL,face,rng,hashS,rankOf,RANKS};
