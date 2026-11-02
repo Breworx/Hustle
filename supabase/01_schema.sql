@@ -301,6 +301,9 @@ alter table game.players add column if not exists country text not null default 
 alter table game.players add column if not exists search_at timestamptz;
 -- Staff accounts play normally but stay out of the competition: hidden from rankings and lists, can't attack or be attacked.
 alter table game.players add column if not exists is_staff boolean not null default false;
+-- A simple speed limit: scripts that hammer the game get told to slow down.
+alter table game.players add column if not exists rl_at timestamptz;
+alter table game.players add column if not exists rl_n int not null default 0;
 -- Invites: each player has a short code for their invite link. A new player can be invited by one other player.
 alter table game.players add column if not exists ref_code text unique;
 alter table game.players add column if not exists referred_by uuid references game.players(id) on delete set null;
@@ -455,6 +458,13 @@ begin
   select * into p from game.players where id = auth.uid() for update;
   if not found then raise exception 'NO_PLAYER'; end if;
   if p.banned_until > t then raise exception 'BANNED|%|%', coalesce(p.ban_reason, ''), p.banned_until; end if;
+  -- No more than 12 requests in any 2 seconds from one player. A person tapping fast never gets near it.
+  -- Only the first call in a request counts (now() is the same all through one request, and last_seen is set to it).
+  if p.last_seen is not distinct from t then null;
+  elsif p.rl_at > t - interval '2 seconds' then
+    p.rl_n := p.rl_n + 1;
+    if p.rl_n > 12 then raise exception 'Slow down a moment.'; end if;
+  else p.rl_at := t; p.rl_n := 1; end if;
   m := extract(epoch from (t - p.bars_at)) / 60.0;
   if m > 0 then
     -- Regulars (bought with tokens) get stamina and grit back 25% faster.
@@ -470,7 +480,8 @@ begin
     p.district := p.travel_to; p.travel_to := null; p.travel_until := null; p.heat := greatest(0, p.heat - 15);
   end if;
   update game.players set stamina = p.stamina, grit = p.grit, mood = p.mood, health = p.health, heat = p.heat,
-    bars_at = p.bars_at, district = p.district, travel_to = p.travel_to, travel_until = p.travel_until, last_seen = t
+    bars_at = p.bars_at, district = p.district, travel_to = p.travel_to, travel_until = p.travel_until, last_seen = t,
+    rl_at = p.rl_at, rl_n = p.rl_n
   where id = p.id;
   p.last_seen := t;
   return p;
