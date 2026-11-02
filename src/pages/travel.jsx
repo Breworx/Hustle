@@ -218,8 +218,33 @@ function CityShop({ city, onBought }) {
     <Panel title={`Only in ${city.name}`} note="Stock is shared with everyone in town and comes back slowly. The rare things come back very slowly." flush>
       <div className="list">{legit.map(it => <Row key={it.item_id} it={it} />)}</div>
     </Panel>
+    <Trader onSold={() => { load(); onBought(); }} />
     {alley.length > 0 && <Panel className="alley" title="Down a back alley" note="Worth several times as much at home. Customs search bags at the border, and they take everything they find." flush>
       <div className="list">{alley.map(it => <Row key={it.item_id} it={it} />)}</div>
     </Panel>}
   </>;
+}
+
+// The town's trader: a fixed price for anything you carry, any day. Sometimes better than the market here, sometimes worse.
+function Trader({ onSold }) {
+  const { run, busy, toast } = useGame();
+  const [t, setT] = useState(null); const [open, setOpen] = useState(false);
+  const load = () => call("city_trader").then(setT).catch(() => setT({ items: [] }));
+  useEffect(() => { load(); }, []);
+  if (!t) return null;
+  const items = open ? t.items : t.items.slice(0, 6);
+  const sell = (it, q) => run("city_sell", { p_item: it.item_id, p_qty: q }, r => { load(); onSold(); toast(`The trader paid ${money(r.paid)} for ${q > 1 ? q + " × " : ""}${itemName(r.item)}.`, "good"); });
+  return (
+    <Panel title={`Sell to the trader in ${t.name}`} note="Fixed prices that never change. Things from far away fetch the most; things made here, the least. Check the market too: players might pay more, or less." flush>
+      {t.items.length === 0 ? <Empty title="Nothing to sell">Your stash is empty.</Empty> : <>
+        <div className="list">{items.map(it => (
+          <div key={it.item_id} className="li">
+            <ItemThumb id={it.item_id} />
+            <div><div className="t">{itemName(it.item_id)}</div><div className="s">{money(it.price)} each here, {Math.round(it.price / Math.max(1, it.value) * 100)}% of book value. You have {num(it.qty)}.</div></div>
+            <div className="act shopact"><button className="btn sm" disabled={busy} onClick={() => sell(it, 1)}>Sell</button>{it.qty > 1 && <button className="btn sm ghost" disabled={busy} onClick={() => sell(it, it.qty)}>Sell {num(it.qty)}</button>}</div>
+          </div>))}</div>
+        {t.items.length > 6 && <div className="body"><button className="btn ghost sm" onClick={() => setOpen(!open)}>{open ? "Show fewer" : `Show all ${t.items.length}`}</button></div>}
+      </>}
+    </Panel>
+  );
 }

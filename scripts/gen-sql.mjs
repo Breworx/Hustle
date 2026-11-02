@@ -37,10 +37,11 @@ const BANDS=[[1500,12000],[300,2500],[40,400],[5,60],[1,10]];
 const seeded=id=>{let h=2166136261;for(const ch of id){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return ((h>>>0)%100000)/100000};
 const supplyOf=it=>{if(it.unlimited)return null;if(it.supply)return it.supply;if(it.id==="founder")return 100;if(["use","food","box"].includes(it.cat))return null;
   const [lo,hi]=BANDS[it.r],u=seeded(it.id);return Math.max(1,Math.round(Math.exp(Math.log(lo)+u*(Math.log(hi)-Math.log(lo)))))};
-const itemRow=it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"},${q(it.season||null)})`;
+const ORIGIN=Object.fromEntries(TOWNS.map(t=>[t[0],t[2]]));
+const itemRow=it=>`(${q(it.id)},${q(it.n)},${q(it.cat)},${it.r},${Math.round(it.v)},${it.fx||0},${q(JSON.stringify(effect(it)))}::jsonb,${SHOPIDS.includes(it.id)},${supplyOf(it)??"null"},${q(it.season||null)},${q(it.city?ORIGIN[it.city]||"NZ":null)},${q(it.city||null)})`;
 const rows=CAT.filter(it=>!it.id.startsWith("w_")).map(itemRow);
-for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season) values\n"+rows.slice(i,i+250).join(",\n")+
- "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season;\n\n";
+for(let i=0;i<rows.length;i+=250)out+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season,origin,origin_city) values\n"+rows.slice(i,i+250).join(",\n")+
+ "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season,origin=excluded.origin,origin_city=excluded.origin_city;\n\n";
 const r2=x=>Math.round(x*100)/100;
 out+="insert into game.stocks(ticker,name,sector,twin,vol,price,prev,history,perk_shares,perk,perk_desc,sort) values\n"+STOCKS.map((s,i)=>{const pct=REAL_1030[s.t];const close=pct!=null?r2(s.base*(1+pct/100)):s.base;
   const hist=pct!=null?[["2026-10-29",s.base,null],["2026-10-30",close,pct]]:[["2026-10-30",s.base,null]];
@@ -135,13 +136,16 @@ let wout=`-- ===================================================================
 const wt=TOWNS.map((t,i)=>[t,i]).filter(([t])=>t[2]!=="NZ");
 for(let i=0;i<wt.length;i+=400)wout+=cityCols+wt.slice(i,i+400).map(([t,k])=>townRow(t,k)).join(",\n")+cityUpd;
 const wrows=WORLD_ITEMS.map(it=>itemRow({...it,unlimited:true}));
-for(let i=0;i<wrows.length;i+=500)wout+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season) values\n"+wrows.slice(i,i+500).join(",\n")+
- "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season;\n";
+for(let i=0;i<wrows.length;i+=500)wout+="insert into game.items(id,name,cat,rarity,value,fx,effect,shop,supply,season,origin,origin_city) values\n"+wrows.slice(i,i+500).join(",\n")+
+ "\non conflict (id) do update set name=excluded.name,cat=excluded.cat,rarity=excluded.rarity,value=excluded.value,fx=excluded.fx,effect=excluded.effect,shop=excluded.shop,supply=excluded.supply,season=excluded.season,origin=excluded.origin,origin_city=excluded.origin_city;\n";
 for(let i=0;i<WORLD_ITEMS.length;i+=800)wout+="insert into game.city_shop(city,item_id,price,max_stock,restock_mins,stock) values\n"+WORLD_ITEMS.slice(i,i+800).map(shopRow).join(",\n")+
  "\non conflict (city,item_id) do update set price=excluded.price,max_stock=excluded.max_stock,restock_mins=excluded.restock_mins;\n";
 wout+="delete from game.city_shop where item_id like 'w\\_%' and item_id not in (select id from game.items where id like 'w\\_%');\n";
-writeFileSync(new URL("../supabase/04_world.sql",import.meta.url),wout);
-console.log("world bytes",wout.length);
+// Split into parts of about 300 KB at statement boundaries, so each one pastes into the Supabase SQL Editor easily on an iPad.
+{const stmts=wout.split(/(?<=;\n)/);const parts=[];let cur="";for(const st of stmts){if(cur.length+st.length>300000&&cur){parts.push(cur);cur="";}cur+=st;}if(cur)parts.push(cur);
+ for(const f of ["04_world.sql","04_world_1.sql","04_world_2.sql","04_world_3.sql","04_world_4.sql"]){try{(await import("node:fs")).unlinkSync(new URL("../supabase/"+f,import.meta.url))}catch(e){}}
+ parts.forEach((t,i)=>writeFileSync(new URL(`../supabase/04_world_${i+1}.sql`,import.meta.url),(i?`-- BACKSTREET · step 4, part ${i+1} of ${parts.length}. Run after part ${i}.\n`:"")+t));
+ console.log("world parts",parts.map(t=>t.length).join(" "));}
 writeFileSync(new URL("../supabase/02_content.sql",import.meta.url),out);
 console.log("wrote",out.length,"bytes");
 const caps=CAT.map(supplyOf).filter(x=>x!=null);console.log("capped items",caps.length,"one-of-ones",caps.filter(x=>x===1).length,"under 10",caps.filter(x=>x<10).length);

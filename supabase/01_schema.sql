@@ -299,6 +299,13 @@ alter table game.cities add column if not exists country text;
 create index if not exists cities_country on game.cities (country);
 alter table game.players add column if not exists country text not null default 'NZ';
 alter table game.players add column if not exists search_at timestamptz;
+-- Where things come from (for local goods), and which town each market listing is in.
+alter table game.items add column if not exists origin text;
+alter table game.items add column if not exists origin_city text;
+alter table game.listings add column if not exists city text not null default 'home';
+alter table game.sales add column if not exists city text not null default 'home';
+create index if not exists listings_city_item on game.listings (city, item_id, price);
+create index if not exists sales_city_item on game.sales (city, item_id, at desc);
 -- Places players own to rent out. A tenant is another player, or a local (npc) found when the place is advertised.
 create table if not exists game.rentals(id bigint generated always as identity primary key,
   owner uuid not null references game.players(id) on delete cascade, property text not null references game.properties(id),
@@ -503,7 +510,7 @@ begin
     update game.inventory set qty = qty - n where player_id = pid and item_id = iid;
   end if;
   -- Eat it, sell it or drop it while you're away, and there's more room in your bag.
-  if iid like 'c\_%' then update game.players set bag = greatest(0, bag - n) where id = pid and city <> 'home'; end if;
+  if iid like 'c\_%' or iid like 'w\_%' then update game.players set bag = greatest(0, bag - n) where id = pid and city <> 'home'; end if;
   -- Anything you no longer own comes out of your loadout.
   if exists (select 1 from game.arms where item_id = iid and slot <> 'ammo') then perform game.loadout_clean(pid); end if;
 end $$;
@@ -964,7 +971,8 @@ begin
          + case when p.stall_until > now() then 10 else 0 end + game.hperk(p.id, 'listings')::int;
   if (select count(*) from game.listings where seller = p.id) >= slots then raise exception 'You can have % listings. Cancel one first.', slots; end if;
   perform game.take(p.id, p_item, p_qty);
-  insert into game.listings(seller, item_id, qty, price) values (p.id, p_item, p_qty, p_price) returning game.listings.id into new_id;
+  -- Listings go up on the market in the town you're in.
+  insert into game.listings(seller, item_id, qty, price, city) values (p.id, p_item, p_qty, p_price, p.city) returning game.listings.id into new_id;
   perform game.track(p.id, 'market', 1);
   return jsonb_build_object('id', new_id);
 end $$;
@@ -976,8 +984,10 @@ begin
   p := game.me(); perform game.need_still(p);
   select * into l from game.listings where id = p_id and seller = p.id for update;
   if not found then raise exception 'That listing is gone.'; end if;
+  if l.city <> p.city then raise exception 'That listing is in %. You''ll have to go there to take it down.', (select name from game.cities where id = l.city); end if;
   delete from game.listings where id = l.id;
   perform game.give(p.id, l.item_id, l.qty);
+  if p.city <> 'home' then update game.players set bag = bag + l.qty where id = p.id; end if;
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -991,6 +1001,8 @@ begin
   if l.seller = p.id then raise exception 'That''s your own listing.'; end if;
   perform game.market_ok(p);
   if q > l.qty then raise exception 'Only % left.', l.qty; end if;
+  if l.city <> p.city then raise exception 'That''s for sale in %. You''ll have to go there to buy it.', (select name from game.cities where id = l.city); end if;
+  if p.city <> 'home' and p.bag + q > coalesce((p.trip->>'cap')::int, 0) then raise exception 'You can''t carry that many more.'; end if;
   cost := l.price * q;
   if p.cash < cost then raise exception 'That''s %. You have % on you.', game.fmt(cost), game.fmt(p.cash); end if;
   fee := floor(cost * 0.03);
@@ -998,7 +1010,8 @@ begin
   update game.players set cash = cash + cost - fee where id = l.seller;
   if q = l.qty then delete from game.listings where id = l.id; else update game.listings set qty = qty - q where id = l.id; end if;
   perform game.give(p.id, l.item_id, q);
-  insert into game.sales(item_id, qty, price, seller, buyer) values (l.item_id, q, l.price, l.seller, p.id);
+  if p.city <> 'home' then update game.players set bag = bag + q where id = p.id; end if;
+  insert into game.sales(item_id, qty, price, seller, buyer, city) values (l.item_id, q, l.price, l.seller, p.id, l.city);
   select name into nm from game.items where id = l.item_id;
   perform game.notify(l.seller, 'sale', format('%s bought %s%s from you for %s (after the 3%% market fee: %s).', p.name,
     case when q > 1 then q || '× ' else '' end, nm, game.fmt(cost), game.fmt(cost - fee)));
@@ -1007,31 +1020,42 @@ begin
   return jsonb_build_object('item', l.item_id, 'qty', q, 'cost', cost);
 end $$;
 
-create or replace function public.market_overview(p_cats text[] default null, p_q text default null) returns jsonb
+drop function if exists public.market_overview(text[], text);
+create or replace function public.market_overview(p_cats text[] default null, p_q text default null, p_city text default null) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
+declare p game.players; cid text;
 begin
-  perform game.me();
+  p := game.me(); cid := coalesce(p_city, p.city);
   return coalesce((select jsonb_agg(x order by x.rarity desc, x.min_price desc) from (
     select l.item_id, i.rarity, i.cat, min(l.price) min_price, sum(l.qty) qty, count(*) listings, i.value
     from game.listings l join game.items i on i.id = l.item_id
-    where (p_cats is null or i.cat = any(p_cats)) and (p_q is null or i.name ilike '%' || p_q || '%')
+    where l.city = cid and (p_cats is null or i.cat = any(p_cats)) and (p_q is null or i.name ilike '%' || p_q || '%')
     group by l.item_id, i.rarity, i.cat, i.value limit 200) x), '[]');
 end $$;
 
-create or replace function public.market_item(p_item text) returns jsonb
+drop function if exists public.market_item(text);
+create or replace function public.market_item(p_item text, p_city text default null) returns jsonb
 language plpgsql security definer set search_path = game, public as $$
-declare p game.players;
+declare p game.players; cid text; it game.items; here game.cities;
 begin
-  p := game.me();
+  p := game.me(); cid := coalesce(p_city, p.city);
+  select * into it from game.items where id = p_item;
+  select * into here from game.cities where id = cid;
   return jsonb_build_object(
-    'value', (select value from game.items where id = p_item),
-    'supply', (select supply from game.items where id = p_item),
-    'found', (select minted from game.items where id = p_item),
+    'city', cid, 'city_name', here.name, 'here', p.city,
+    'value', it.value, 'supply', it.supply, 'found', it.minted,
     'around', coalesce((select sum(qty) from game.inventory where item_id = p_item), 0) + coalesce((select sum(qty) from game.listings where item_id = p_item), 0),
     'listings', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'qty', l.qty, 'price', l.price, 'seller', pl.name, 'mine', l.seller = p.id) order by l.price, l.id)
-                 from (select * from game.listings where item_id = p_item order by price, id limit 40) l join game.players pl on pl.id = l.seller), '[]'),
+                 from (select * from game.listings where item_id = p_item and city = cid order by price, id limit 40) l join game.players pl on pl.id = l.seller), '[]'),
     'sales', coalesce((select jsonb_agg(jsonb_build_object('price', s.price, 'qty', s.qty, 'at', s.at) order by s.at)
-                 from (select * from game.sales where item_id = p_item order by at desc limit 30) s), '[]'));
+                 from (select * from game.sales where item_id = p_item and city = cid order by at desc limit 30) s), '[]'),
+    -- Where else it's listed, and which towns' traders pay the most for it.
+    'elsewhere', coalesce((select jsonb_agg(jsonb_build_object('city', c.id, 'name', c.name, 'country', c.country, 'price', z.lo, 'qty', z.n) order by z.lo)
+                 from (select city, min(price) lo, sum(qty) n from game.listings where item_id = p_item and city <> cid group by city order by min(price) limit 8) z join game.cities c on c.id = z.city), '[]'),
+    'trader_here', case when cid = 'home' then floor(it.value * 0.5) else game.trader_price(it, here) end,
+    'traders', coalesce((select jsonb_agg(jsonb_build_object('city', z.id, 'name', z.name, 'country', z.country, 'price', z.price) order by z.price desc)
+                 from (select c.id, c.name, c.country, game.trader_price(it, c) price from game.cities c where c.id <> 'home' order by 4 desc limit 6) z), '[]'),
+    'origin', it.origin, 'origin_city', (select name from game.cities where id = it.origin_city));
 end $$;
 
 create or replace function public.my_listings() returns jsonb
@@ -1039,8 +1063,8 @@ language plpgsql security definer set search_path = game, public as $$
 declare p game.players;
 begin
   p := game.me();
-  return coalesce((select jsonb_agg(jsonb_build_object('id', id, 'item_id', item_id, 'qty', qty, 'price', price, 'created_at', created_at) order by created_at desc)
-                   from game.listings where seller = p.id), '[]');
+  return coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'item_id', l.item_id, 'qty', l.qty, 'price', l.price, 'created_at', l.created_at, 'city', l.city, 'city_name', c.name) order by l.created_at desc)
+                   from game.listings l left join game.cities c on c.id = l.city where l.seller = p.id), '[]');
 end $$;
 
 -- ---------- stock exchange ----------
@@ -3599,6 +3623,71 @@ begin
   return jsonb_build_object('left', h.name);
 end $$;
 
+-- =====================================================================
+-- TRADING ACROSS THE WORLD: a market in every city, and local traders
+-- =====================================================================
+-- What a town's trader pays for something. Fixed for each item in each town, and it depends on where the item comes from:
+-- next to nothing where it's made, a bit more elsewhere in that country, more in the same part of the world,
+-- and the most on the other side of it. Ordinary things without a home country fetch a middling price anywhere.
+create or replace function game.trader_price(i game.items, c game.cities) returns bigint language plpgsql stable as $$
+declare u numeric; oz text; cz text; m numeric;
+begin
+  if c.id = 'home' or c.id is null then return floor(i.value * 0.5); end if;
+  u := ('x' || substr(md5(i.id || '/' || c.id), 1, 7))::bit(28)::int / 268435456.0;
+  if i.origin is null then m := 0.35 + 0.3 * u;
+  elsif i.origin_city = c.id then m := 0.22;
+  elsif i.origin = c.country then m := 0.3 + 0.2 * u;
+  else
+    select zone into oz from game.countries where iso = i.origin;
+    select zone into cz from game.countries where iso = c.country;
+    m := case when oz = cz then 0.55 + 0.35 * u else 0.75 + 0.5 * u end;
+    if i.cat = 'contraband' then m := m * 1.25; end if;
+  end if;
+  return greatest(1, floor(i.value * m));
+end $$;
+
+-- Sell to the trader in the town you're in.
+create or replace function public.city_sell(p_item text, p_qty int default 1) returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; it game.items; c game.cities; q int := greatest(1, coalesce(p_qty, 1)); pay bigint;
+begin
+  p := game.me(); perform game.need_still(p);
+  if p.city = 'home' then raise exception 'In Greyhaven, use the pawn shop.'; end if;
+  if p.jail_until > now() or p.hosp_until > now() then raise exception 'Not right now.'; end if;
+  select * into it from game.items where id = p_item;
+  if not found then raise exception 'Unknown item.'; end if;
+  if it.id in ('founder', 'token') then raise exception 'The trader won''t touch that.'; end if;
+  select * into c from game.cities where id = p.city;
+  perform game.take(p.id, it.id, q);
+  pay := floor(game.trader_price(it, c) * q * (1 + least(0.1, (game.skill_lvl(p.skills, 'trade') - 1) * 0.003)));
+  update game.players set cash = cash + pay where id = p.id;
+  perform game.add_skill(p.id, 'trade', 1);
+  return jsonb_build_object('item', it.id, 'qty', q, 'paid', pay, 'city', c.name);
+end $$;
+
+-- What the trader here would pay for everything you're carrying, best first.
+create or replace function public.city_trader() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players; c game.cities;
+begin
+  p := game.me();
+  select * into c from game.cities where id = p.city;
+  return jsonb_build_object('city', c.id, 'name', c.name, 'items', coalesce((select jsonb_agg(jsonb_build_object('item_id', z.id, 'qty', z.qty, 'price', z.price, 'value', z.value) order by z.price desc) from (
+    select i.id, v.qty, i.value, game.trader_price(i, c) price
+    from game.inventory v join game.items i on i.id = v.item_id where v.player_id = p.id and v.qty > 0 and i.id not in ('founder', 'token')
+    order by 4 desc limit 60) z), '[]'));
+end $$;
+
+-- Towns with something on their market.
+create or replace function public.market_cities() returns jsonb
+language plpgsql security definer set search_path = game, public as $$
+declare p game.players;
+begin
+  p := game.me();
+  return jsonb_build_object('here', p.city, 'cities', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'country', c.country, 'listings', z.n) order by c.id <> 'home', z.n desc)
+    from (select city, count(*) n from game.listings group by city) z join game.cities c on c.id = z.city), '[]'));
+end $$;
+
 -- Only signed-in players may call the public API.
 do $$ declare f record; begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -3612,7 +3701,7 @@ do $$ declare f record; begin
              'company_decide','company_staff','company_funds','company_shift','company_leave',
              'company_sell','company_buy','company_offer','company_offer_cancel','company_offer_decide','career_state','career_join','career_shift',
              'vehicle_list','vehicle_buy','medals_state','title_set','missions_state','mission_start','mission_drop','mission_claim','profile_set','my_collection','admin_overview','admin_find','admin_act','admin_reports',
-             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave') loop
+             'admin_resolve','admin_delete_message','armoury','arms_buy','loadout_set','fight_start','fight_turn','fight_get','travel_state','travel_go','city_shop','city_buy','travel_gear_buy','travel_quote','country_set','city_search','rentals_state','rental_buy','rental_set','rental_evict','rental_collect','rental_sell','rental_rent','rental_leave','city_sell','city_trader','market_cities') loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then execute format('revoke all on function %s from anon', f.sig); end if;
     execute format('grant execute on function %s to authenticated', f.sig);
