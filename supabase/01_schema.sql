@@ -299,6 +299,8 @@ alter table game.cities add column if not exists country text;
 create index if not exists cities_country on game.cities (country);
 alter table game.players add column if not exists country text not null default 'NZ';
 alter table game.players add column if not exists search_at timestamptz;
+-- Staff accounts play normally but stay out of the competition: hidden from rankings and lists, can't attack or be attacked.
+alter table game.players add column if not exists is_staff boolean not null default false;
 -- Where things come from (for local goods), and which town each market listing is in.
 alter table game.items add column if not exists origin text;
 alter table game.items add column if not exists origin_city text;
@@ -579,7 +581,7 @@ create or replace function game.card(p game.players) returns jsonb language sql 
     'created_at', p.created_at, 'founder', p.founder, 'regular', coalesce(p.regular_until > now(), false),
     'look', p.look, 'name_color', p.name_color, 'backdrop', p.backdrop, 'tagline', p.tagline, 'title', p.title,
     'crew', (select jsonb_build_object('id', c.id, 'name', c.name, 'tag', c.tag) from game.crews c where c.id = p.crew_id),
-    'protected', (p.level < 3 or p.created_at > now() - interval '1 day')) $$;
+    'protected', (p.level < 3 or p.created_at > now() - interval '1 day' or p.is_staff), 'staff', p.is_staff) $$;
 
 -- =====================================================================
 -- public API (what the web app calls)
@@ -646,7 +648,7 @@ begin
     'shift_ready', p.career is not null and (p.career_at is null or p.career_at < now() - interval '20 hours'),
     'home_ready', (select (h.perks ? 'daily') and (p.home_at is null or p.home_at < now() - interval '20 hours') from game.properties h where h.id = p.property),
     'tower', (select jsonb_agg(name) from (select x.name from game.players x join game.properties h on h.id = x.property where h.perks ? 'skyline' order by h.sort desc, x.name limit 5) x),
-    'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes'),
+    'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes' and not is_staff),
     'server_time', now());
 end $$;
 
@@ -780,7 +782,7 @@ begin
           order by x.last_seen desc), '[]') into out
   from game.players x
   where x.id in (select y.id from game.players y
-        where y.id <> p.id
+        where y.id <> p.id and (not y.is_staff or p_scope in ('search', 'contacts'))
           and case p_scope
                 when 'search' then y.name ilike '%' || coalesce(p_q, '') || '%'
                 when 'online' then y.last_seen > now() - interval '5 minutes'
@@ -1219,7 +1221,7 @@ begin
   end if;
   return coalesce((select jsonb_agg(x) from (
     select id, name, level, wins, district, look, name_color, case when p_by = 'wealth' then game.networth(id) end networth
-    from game.players where banned_until is null or banned_until < now()
+    from game.players where (banned_until is null or banned_until < now()) and not is_staff
     order by case when p_by = 'wealth' then game.networth(id) when p_by = 'fights' then wins else level * 1000000 + xp end desc
     limit 50) x), '[]');
 end $$;
@@ -1354,7 +1356,7 @@ begin
   -- Seasonal event points
   insert into game.season_points(season, year, player_id, points)
     select s.id, extract(year from game.today())::int, pid, (s.points->>track.k)::numeric * track.n from game.seasons s
-    where s.id = game.season_now() and s.points ? track.k
+    where s.id = game.season_now() and s.points ? track.k and not (select is_staff from game.players where id = pid)
     on conflict (season, year, player_id) do update set points = game.season_points.points + excluded.points;
 end $$;
 
@@ -1893,7 +1895,7 @@ begin
   a := game.need_admin();
   return jsonb_build_object(
     'players', (select count(*) from game.players),
-    'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes'),
+    'online', (select count(*) from game.players where last_seen > now() - interval '5 minutes' and not is_staff),
     'today', (select count(*) from game.players where last_seen > now() - interval '1 day'),
     'new_today', (select count(*) from game.players where created_at > now() - interval '1 day'),
     'banned', (select count(*) from game.players where banned_until > now()),
@@ -1916,7 +1918,7 @@ declare a game.players;
 begin
   a := game.need_admin();
   return coalesce((select jsonb_agg(game.card(x) || jsonb_build_object('email', u.email, 'cash', x.cash, 'bank', x.bank, 'banned_until', x.banned_until, 'ban_reason', x.ban_reason,
-      'muted_until', x.muted_until, 'is_admin', x.is_admin, 'tokens', coalesce((select qty from game.inventory v where v.player_id = x.id and v.item_id = 'token'), 0),
+      'muted_until', x.muted_until, 'is_admin', x.is_admin, 'is_staff', x.is_staff, 'tokens', coalesce((select qty from game.inventory v where v.player_id = x.id and v.item_id = 'token'), 0),
       'spent_cents', coalesce((select sum(amount_cents) from game.purchases where player_id = x.id), 0), 'networth', game.networth(x.id)) order by x.last_seen desc)
     from (select * from game.players y where coalesce(p_q, '') = '' or y.name ilike '%' || p_q || '%' or y.id::text = p_q order by y.last_seen desc limit 40) x
     left join auth.users u on u.id = x.id), '[]');
@@ -1951,6 +1953,7 @@ begin
     when 'take' then perform game.take(t.id, p_item, greatest(1, p_amount)::int);
     when 'release' then update game.players set jail_until = null, hosp_until = null, travel_until = now() where id = t.id;
     when 'admin' then update game.players set is_admin = p_amount > 0 where id = t.id;
+    when 'staff' then update game.players set is_staff = p_amount > 0 where id = t.id;
     else raise exception 'Unknown action.';
   end case;
   insert into game.admin_log(admin, target, action, detail) values (a.id, t.id, p_action, concat_ws(' ', nullif(p_amount, 0)::text, p_item, nullif(why, '')));
@@ -2862,6 +2865,8 @@ create or replace function game.pvp_check(p game.players, t game.players) return
 declare w game.wars;
 begin
   if t.id = p.id then raise exception 'You can''t attack yourself.'; end if;
+  if t.is_staff then raise exception '% runs the game and can''t be attacked.', t.name; end if;
+  if p.is_staff then raise exception 'Staff accounts don''t attack players.'; end if;
   if p.level < 3 then raise exception 'You need level 3 before you can attack other players.'; end if;
   if game.status(t) <> 'ok' then raise exception '% isn''t around right now.', t.name; end if;
   w := game.war_between(p.crew_id, t.crew_id);

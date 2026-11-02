@@ -66,7 +66,7 @@ function PlayerTools() {
       <div className="list">{rows.map(p => (<React.Fragment key={p.id}>
         <button className="li click" onClick={() => setOpen(open === p.id ? null : p.id)}>
           <Avatar seed={p.id} look={p.look} />
-          <div><div className="t"><Name p={p} /> {p.is_admin && <span className="pill warn">Admin</span>} {p.banned_until && new Date(p.banned_until) > Date.now() && <span className="pill bad">Banned</span>} {p.muted_until && new Date(p.muted_until) > Date.now() && <span className="pill">Muted</span>}</div>
+          <div><div className="t"><Name p={p} /> {p.is_admin && <span className="pill warn">Admin</span>} {p.is_staff && <span className="pill">Staff</span>} {p.banned_until && new Date(p.banned_until) > Date.now() && <span className="pill bad">Banned</span>} {p.muted_until && new Date(p.muted_until) > Date.now() && <span className="pill">Muted</span>}</div>
             <div className="s">{p.email}, level {p.level}. {money(p.cash)} cash, {money(p.bank)} banked, {num(p.tokens)} tokens. Spent {cents({ nzd: p.spent_cents })}. Seen {ago(p.last_seen)}.</div></div>
           <div className="act"><Ic.ChevronRight style={{ width: 18, color: "var(--mist)" }} /></div>
         </button>
@@ -92,6 +92,7 @@ function Actions({ p, busy, act }) {
             {banned ? <button className="btn ghost sm" disabled={busy} onClick={() => act("unban")}>Lift ban</button> : <button className="btn danger sm" disabled={busy} onClick={() => act("ban", hours, null, reason)}><Ic.Ban />Ban</button>}
             {muted ? <button className="btn ghost sm" disabled={busy} onClick={() => act("unmute")}>Unmute</button> : <button className="btn ghost sm" disabled={busy} onClick={() => act("mute", Math.max(1, hours), null, reason)}><Ic.VolumeX />Mute</button>}
             <button className="btn ghost sm" disabled={busy} onClick={() => act("release")}>Free from cells or A&amp;E</button>
+            <button className="btn ghost sm" disabled={busy} title="Staff play normally but are hidden from rankings and lists, and can't attack or be attacked" onClick={() => act("staff", p.is_staff ? 0 : 1)}>{p.is_staff ? "Remove staff" : "Make staff"}</button>
             <button className="btn ghost sm" onClick={() => go("player/" + p.id)}>Profile</button>
           </div>
           {p.ban_reason && <p className="tiny">Ban reason: {p.ban_reason}</p>}

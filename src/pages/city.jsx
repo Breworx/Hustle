@@ -81,7 +81,7 @@ export function Profile({ arg }) {
   if (!p) return <Empty title="Loading…" />;
   const sameCrew = p.crew && me.crew_id === p.crew.id;
   const canHit = !p.is_me && !sameCrew && p.status === "ok" && !p.protected && p.district === me.district && me.level >= 3 && me.status === "ok";
-  const why = p.is_me ? null : sameCrew ? `${p.name} is in your crew.` : p.protected ? `${p.name} is new to the city and protected for now.` : p.status !== "ok" ? `${p.name} isn't around right now.` : p.district !== me.district ? `${p.name} is in ${DISTRICT_NAMES[p.district]}.` : me.level < 3 ? "You can attack other players from level 3." : null;
+  const why = p.is_me ? null : p.staff ? `${p.name} runs the game and can't be attacked.` : sameCrew ? `${p.name} is in your crew.` : p.protected ? `${p.name} is new to the city and protected for now.` : p.status !== "ok" ? `${p.name} isn't around right now.` : p.district !== me.district ? `${p.name} is in ${DISTRICT_NAMES[p.district]}.` : me.level < 3 ? "You can attack other players from level 3." : null;
   return (
     <div className="page">
       <div className={`panel profile ${p.backdrop ? "has-backdrop" : ""}`}>
@@ -91,7 +91,7 @@ export function Profile({ arg }) {
           <div className="grow">{p.title && <div className="ptitle">{p.title}</div>}<h1><Name p={p} tag={false} /></h1>
             {p.tagline && <p className="tagline">“{p.tagline}”</p>}
             <p className="muted">Level {p.level}, {rankOf(p.level).toLowerCase()}{p.crew ? <> in <button style={{ ...nameBtn, color: "var(--signal)" }} onClick={() => go("crew/" + p.crew.id)}>{p.crew.name}</button>{p.crew_role === "leader" ? ", which they lead" : ""}</> : ""}. On the street since {new Date(p.created_at).toLocaleDateString("en-NZ", { month: "long", year: "numeric" })}.</p>
-            <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span>{p.founder && <span className="pill scarce"><Ic.Sparkles />Founder #{p.founder}</span>}{p.regular && <span className="pill good"><Ic.Star />Regular</span>}<span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
+            <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}><span className={`pill ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}{p.until && p.status !== "ok" ? <>&nbsp;for <Countdown until={p.until} onDone={load} /></> : null}</span>{p.staff && <span className="pill warn"><Ic.ShieldCheck />Staff</span>}{p.founder && <span className="pill scarce"><Ic.Sparkles />Founder #{p.founder}</span>}{p.regular && <span className="pill good"><Ic.Star />Regular</span>}<span className="pill"><Ic.MapPin />{DISTRICT_NAMES[p.district]}</span><span className="pill">Last seen {ago(p.last_seen)}</span></div>
             {(p.jail_reason || p.hosp_reason) && <p className="tiny" style={{ marginTop: 6 }}>{p.jail_reason || p.hosp_reason}</p>}</div>
           {!p.is_me ? <div className="stack-sm" style={{ alignItems: "flex-end" }}>
             <button className="btn danger" disabled={busy || !canHit} onClick={() => startFight(p.id)}><Ic.Swords />Attack</button>
